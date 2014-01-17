@@ -1,0 +1,10 @@
+# log outputs
+nohup.out
+
+# Emacs
+*~
+\#*\#
+.\#*
+
+# Python
+*.pyc
