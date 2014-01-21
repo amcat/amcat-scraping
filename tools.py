@@ -1,7 +1,7 @@
 from html2text import html2text as html_to_text
 from amcat.tools.toolkit import readDate
 from lxml import html, etree
-
+import logging
 
 def html2text(data):
     if type(data) == list:
@@ -17,5 +17,6 @@ def read_date(string, **kwargs):
 def parse_form(form):
     return {inp.get('name') : inp.get('value', '').encode('utf-8') for inp in form.cssselect('input')}
 
-
-
+def config_logging():
+    # I've never understood logging, and I never will. Please improve.
+    pass

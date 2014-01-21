@@ -1,150 +1,156 @@
-from amcatscraping.browser import Browser
+from django import forms
+import logging; log = logging.getLogger(__name__)
+import warnings
+
+from amcatscraping.opener import Opener
 from amcat.scripts.script import Script
 from amcat.models.articleset import ArticleSet
 from amcat.models.medium import Medium
 from amcatclient.api import AmcatAPI
 
-from django import forms
-import logging; log = logging.getLogger(__name__)
-from datetime import timedelta
-import os
 
 class ScraperForm(forms.Form):
     articleset = forms.ModelChoiceField(ArticleSet.objects.all())
+    api_host = forms.CharField()
+    api_user = forms.CharField()
+    api_password = forms.CharField()
 
 class Scraper(Script):
     options_form = ScraperForm
+
     def run(self, input = None):
-        # 1) Initialize when needed
-        self._initialize()
-
-        # 2) Get articles
         articles = list(self._scrape())
-
-        # 3) Postprocess when needed
         articles = self._postprocess(articles)
-
-        # 4) Save articles
-        self._save(articles)
-
-    def _initialize(self):
-        pass
+        self._save(articles, 
+                   self.options['api_host'],
+                   self.options['api_user'],
+                   self.options['api_password'])
 
     def _scrape(self):
         """Scrape the target resource and return a sequence of article dicts"""
         raise NotImplementedError()
 
     def _postprocess(self, articles):
-        pass
+        """Space to do something with the unsaved articles that the scraper provided"""
+        return articles
 
-    def _save(self, articles):
-        host = os.environ.get('AMCAT_API_HOST')
-        user = os.environ.get('AMCAT_API_USER')
-        passwd = os.environ.get('AMCAT_API_PASSWORD')
-        api = AmcatAPI(host, user, passwd)
+    def _save(self, articles, *auth):
+        api = AmcatAPI(*auth)
         api.create_articles(
             self.options['articleset'].project.id,
             self.options['articleset'].id,
             json_data = articles)
-        
 
 
-class QualityForm(ScraperForm):
-    username = forms.CharField(required = False)
-    password = forms.CharField(required = False)
-
-class QualityScraper(Scraper):
+class UnitScraper(Scraper):
     """
-    Scraper with a number of convenience improvements:
-    - auto-adds article.project and article.medium
-    - optional _login function
-    - unit-based scraping, so if one article fails, others don't
-    - a browser at it's disposal
-    - optionally checks for properties
-    - possibility to specify date(s)
-    - exception management, logging
+    Scrapes the resource on a per-unit basis
+    children classes should overrride _get_units and _scrape_unit
     """
-    options_form = QualityForm
-    browser = Browser()
-
-    def __init__(self, *args, **kwargs):
-        if not all([
-                os.environ.get('AMCAT_API_HOST'),
-                os.environ.get('AMCAT_API_USER'),
-                os.environ.get('AMCAT_API_PASSWORD')]):
-            raise ValueError("Please specify AMCAT_API_HOST, AMCAT_API_USER, AMCAT_API_PASSWORD")
-
-        if not hasattr(self, 'medium_name'):
-            raise AttributeError("Please specify scraper.medium_name")
-        super(QualityScraper, self).__init__(*args, **kwargs)
-
-    def run(self, _input = None):
-        self._initialize()
-        articles = list(self._scrape())
-        articles = self._postprocess(articles)
-        self._save(articles)
-
-
-    def _initialize(self):
-        username = self.options.get('username')
-        password = self.options.get('password')
-        if not self._login(username, password):
-            raise ValueError("Login failed")
-
-    def _login(self, username, password):
-        """To be overridden"""
-        return True        
-
-
     def _scrape(self):
         for unit in self._get_units():
             try:
                 yield self._scrape_unit(unit)
             except Exception:
+                log.exception("_scrape_unit failed")
                 continue
-            
-    def _get_units(self):
-        raise NotImplementedError()
-
-    def _scrape_unit(self, unit):
-        raise NotImplementedError()
-
-
-    def _postprocess(self, articles):
-        if hasattr(self, '_properties'):
-            self._propertycheck(articles)
-        for a in articles:
-            a['medium'] = Medium.get_or_create(self.medium_name).id
-            a['project'] = self.options['articleset'].project.id
-        return articles
-
-    def _propertycheck(self, articles):
-        props = self._properties
-        for prop in props['all']:
-            log.info("checking '{prop}' property...".format(**locals()))
-            assert all([a.get(prop) for a in articles])
-        for prop in props['some']:
-            log.info("checking '{prop}' property...".format(**locals()))
-            assert any([a.get(prop) for a in articles])
-
-
-    #### Utility functions ####
-
-    def open(self, url, data = None):
-        return self.browser.open(url, data)
-
-    def getdoc(self, url, data = None):
-        return self.browser.getdoc(url, data)
-
-    def navigate(self, anchor):
-        return self.browser.navigate(anchor)
-    
 
 
 class DateRangeForm(ScraperForm):
     first_date = forms.DateField()
     last_date = forms.DateField()
 
-class DateRangeScraper(QualityScraper):
-    """Like the quality scraper, but gives 2 dates between which the scraper must limit it's articles"""
+class DateRangeScraper(Scraper):
+    """
+    Omits any articles that haven't been published in a given period.
+    Provides a first_date and last_date option which children classes can use
+    to select data from their resource.
+    """
     options_form = DateRangeForm
+    def _postprocess(self, articles):
+        articles = super(DateRangeScraper, self)._postprocess(articles)
+        for a in articles:
+            if not self.options['first_date'] <= a['date'].date() <= self.options['last_date']:
+                warnings.warn("Not saving '{a}': it is of an incorrect date ({a[date]})".format(**locals()))
+                articles.remove(a)
+        return articles
+
+
+class LoginForm(ScraperForm):
+    username = forms.CharField()
+    password = forms.CharField()
+
+class LoginDateRangeForm(DateRangeForm, LoginForm):
+    """Use this form if you're using both the LoginMixin and the DateRangeScraper"""
+
+class LoginMixin(object):
+    """Logs in to the resource before scraping"""
+    options_form = LoginForm
+
+    def _scrape(self, *args, **kwargs):
+        username = self.options['username']
+        password = self.options['password']
+        if not self._login(username, password):
+            raise Exception("Login failed")
+        return super(LoginMixin, self)._scrape(*args, **kwargs)
+
+    def _login(self, username, password):
+        raise NotImplementedError()
+
+
+class OpenerMixin(object):
+    """
+    Provides a HTTP opener and some convenience functions
+    """
+    def __init__(self, *args, **kwargs):
+        self.opener = Opener()
+        super(OpenerMixin, self).__init__(*args, **kwargs)
+
+    def open(self, *args, **kwargs):
+        return self.opener.open(*args, **kwargs)
+
+    def open_html(self, *args, **kwargs):
+        return self.opener.open_html(*args, **kwargs)
+
+    def navigate_html(self, *args, **kwargs):
+        return self.opener.navigate_html(*args, **kwargs)
+
+
+class PropertyCheckMixin(object):
+    """
+    Before saving, this mixin has the scraper check whether all given article props are present
+    and fill in the blanks with default values
+    When mixing this in, make sure the scraper contains a '_props' member with the following structure:
+    {
+        'defaults' : {
+            '<property1>' : '<value>',
+            '<property2>' : '<value>',
+            ...
+            '<propertyN>' : '<value>'
+            },
+        'required' : ['<property1>', '<property2>', ..., '<propertyN>'],
+        'expected' : ['<property1>', '<property2>', ..., '<propertyN>']
+        }
+    """
+    
+    def _postprocess(self, articles):
+        articles = super(PropertyCheckMixin, self)._postprocess(articles)
+        articles = self._add_defaults(articles)
+        self._check_properties(articles)
+        return articles
+        
+    def _add_defaults(self, articles):
+        log.info("Filling in defaults...")
+        self._props['defaults']['project'] = self.options['articleset'].project.id
+        for prop, default in self._props['defaults'].items():
+            for article in articles:
+                if not article.get(prop):
+                    article[prop] = default
+        return articles
+
+    def _check_properties(self, articles):
+        log.info("Checking properties...")
+        for prop in self._props['required']:
+            assert all([article.get(prop) for article in articles])
+        for prop in self._props['expected']:
+            assert any([article.get(prop) for article in articles])
