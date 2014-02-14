@@ -1,30 +1,50 @@
-from django import forms
+from datetime import datetime, timedelta
 import logging; log = logging.getLogger(__name__)
 import warnings
+import argparse
 
-from amcatscraping.opener import Opener
-from amcat.scripts.script import Script
-from amcat.models.articleset import ArticleSet
-from amcat.models.medium import Medium
+from amcatscraping.celery.tasks import run_scraper
+from amcatscraping.scraping.opener import Opener
 from amcatclient.api import AmcatAPI
 
+class Scraper(object):
+    def __init__(self, *args,**kwargs):
+        parser = self._make_parser()
+        if args or kwargs: #not invoked from CLI
+            to_parse = [str(a) for a in args]
+            for key, value in kwargs.items():
+                to_parse.append("--" + key)
+                if not type(value) == bool:
+                    to_parse.append(value)
+            arguments = parser.parse_args(to_parse)
+        else:
+            arguments = parser.parse_args()
+        self.options = vars(arguments)
 
-class ScraperForm(forms.Form):
-    articleset = forms.ModelChoiceField(ArticleSet.objects.all())
-    api_host = forms.CharField()
-    api_user = forms.CharField()
-    api_password = forms.CharField()
-
-class Scraper(Script):
-    options_form = ScraperForm
+    def _make_parser(self):
+        """Build a parser to interpret the arguments given"""
+        parser = argparse.ArgumentParser()
+        parser.add_argument("project",type=int)
+        parser.add_argument("articleset",type=int)
+        parser.add_argument("api_host")
+        parser.add_argument("api_user")
+        parser.add_argument("api_password")
+        return parser
 
     def run(self, input = None):
+        log.info("getting articles...")
         articles = list(self._scrape())
+        log.info("...postprocessing...")
         articles = self._postprocess(articles)
+        log.info("...saving...")
         self._save(articles, 
                    self.options['api_host'],
                    self.options['api_user'],
                    self.options['api_password'])
+        log.info("...done.")
+
+    def run_async(self):
+        run_scraper.delay(self)
 
     def _scrape(self):
         """Scrape the target resource and return a sequence of article dicts"""
@@ -32,13 +52,14 @@ class Scraper(Script):
 
     def _postprocess(self, articles):
         """Space to do something with the unsaved articles that the scraper provided"""
+        articles = [a for a in articles if a]
         return articles
 
     def _save(self, articles, *auth):
         api = AmcatAPI(*auth)
         api.create_articles(
-            self.options['articleset'].project.id,
-            self.options['articleset'].id,
+            self.options['project'],
+            self.options['articleset'],
             json_data = articles)
 
 
@@ -56,36 +77,42 @@ class UnitScraper(Scraper):
                 continue
 
 
-class DateRangeForm(ScraperForm):
-    first_date = forms.DateField()
-    last_date = forms.DateField()
-
 class DateRangeScraper(Scraper):
     """
     Omits any articles that haven't been published in a given period.
     Provides a first_date and last_date option which children classes can use
     to select data from their resource.
     """
-    options_form = DateRangeForm
+    def __init__(self, *args, **kwargs):
+        super(DateRangeScraper, self).__init__(*args, **kwargs)
+        n_days = (self.options['last_date'] - self.options['first_date']).days
+        self.dates = [self.options['first_date'] + timedelta(days = x) for x in range(n_days + 1)]
+
+    def _make_parser(self):
+        parser = super(DateRangeScraper, self)._make_parser()
+        def mkdate(datestring):
+            return datetime.strptime(datestring, '%Y-%m-%d').date()
+        parser.add_argument('first_date',type=mkdate)
+        parser.add_argument('last_date',type=mkdate)
+        return parser
+
     def _postprocess(self, articles):
         articles = super(DateRangeScraper, self)._postprocess(articles)
         for a in articles:
-            if not self.options['first_date'] <= a['date'].date() <= self.options['last_date']:
+            if not self.options['first_date'] <= a['date'] <= self.options['last_date']:
                 warnings.warn("Not saving '{a}': it is of an incorrect date ({a[date]})".format(**locals()))
                 articles.remove(a)
         return articles
 
 
-class LoginForm(ScraperForm):
-    username = forms.CharField()
-    password = forms.CharField()
-
-class LoginDateRangeForm(DateRangeForm, LoginForm):
-    """Use this form if you're using both the LoginMixin and the DateRangeScraper"""
-
 class LoginMixin(object):
     """Logs in to the resource before scraping"""
-    options_form = LoginForm
+
+    def _make_parser(self):
+        parser = super(LoginMixin, self)._make_parser()
+        parser.add_argument('username')
+        parser.add_argument('password')
+        return parser
 
     def _scrape(self, *args, **kwargs):
         username = self.options['username']
@@ -131,6 +158,8 @@ class PropertyCheckMixin(object):
         'required' : ['<property1>', '<property2>', ..., '<propertyN>'],
         'expected' : ['<property1>', '<property2>', ..., '<propertyN>']
         }
+    'required' means all articles should have this property
+    'expected' means at least one article should have this property
     """
     
     def _postprocess(self, articles):
@@ -141,7 +170,7 @@ class PropertyCheckMixin(object):
         
     def _add_defaults(self, articles):
         log.info("Filling in defaults...")
-        self._props['defaults']['project'] = self.options['articleset'].project.id
+        self._props['defaults']['project'] = self.options['project']
         for prop, default in self._props['defaults'].items():
             for article in articles:
                 if not article.get(prop):
@@ -154,3 +183,6 @@ class PropertyCheckMixin(object):
             assert all([article.get(prop) for article in articles])
         for prop in self._props['expected']:
             assert any([article.get(prop) for article in articles])
+
+if __name__ == "__main__":
+    s = Scraper()

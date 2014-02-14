@@ -1,5 +1,5 @@
-from amcatscraping.scraper import UnitScraper, OpenerMixin, PropertyCheckMixin
-from amcatscraping import tools
+from amcatscraping.scraping.scraper import UnitScraper, OpenerMixin, PropertyCheckMixin
+from amcatscraping.scraping import tools
 
 class TeletekstScraper(OpenerMixin, PropertyCheckMixin, UnitScraper):
     def _get_units(self):
@@ -25,5 +25,6 @@ class TeletekstScraper(OpenerMixin, PropertyCheckMixin, UnitScraper):
     
 
 if __name__ == "__main__":
-    from amcat.scripts.tools import cli
-    cli.run_cli(TeletekstScraper)
+    from amcatscraping.scraping.tools import setup_logging
+    setup_logging()
+    TeletekstScraper().run()

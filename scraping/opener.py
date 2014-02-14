@@ -5,14 +5,25 @@ from lxml import html
 from httplib2 import iri2uri
 from urlparse import urljoin
 from urllib  import urlencode
-import cookielib
+import cookielib, threading
 
 import logging; log = logging.getLogger(__name__)
+
+class PickleJar(cookielib.CookieJar):
+    """Pickeable cookiejar"""
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        del state['_cookies_lock']
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__ = state
+        self._cookies_lock = threading.RLock()
 
 class Opener(object):
     def __init__(self):
         # Construct a urllib2 opener
-        self.cookiejar = cookielib.CookieJar()
+        self.cookiejar = PickleJar()
         self.opener = urllib2.build_opener(
             urllib2.HTTPCookieProcessor(self.cookiejar),
             urllib2.HTTPRedirectHandler(),
