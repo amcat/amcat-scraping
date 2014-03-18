@@ -31,8 +31,8 @@ class Opener(object):
             )
 
     def open(self, url, data = None):
-        url = iri2uri(url).strip()
-        if data:
+        url = iri2uri(url)
+        if data and hasattr(data,'__iter__'):
             data = urlencode(data)
         log.info("opening {url}".format(**locals()))
         return self.opener.open(url, data)

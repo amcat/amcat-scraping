@@ -2,6 +2,8 @@ from html2text import html2text as html_to_text
 from lxml import html, etree
 import logging, sys, re
 
+### MISC ###
+
 def html2text(data):
     if type(data) == list:
         return "".join([html2text(bit) for bit in data])
@@ -13,6 +15,20 @@ def html2text(data):
 def parse_form(form):
     return {inp.get('name') : inp.get('value', '').encode('utf-8') for inp in form.cssselect('input')}
 
+def setup_logging():
+    loggers = [logging.getLogger("amcatscraping")]
+    handlers = [logging.StreamHandler(sys.stdout)]
+    
+    for handler in handlers:
+        handler.setLevel(logging.INFO)
+
+    for logger in loggers:
+        logger.propagate = False
+        logger.setLevel(logging.INFO)
+        for handler in handlers:
+            logger.addHandler(handler)
+
+### PARSE DATES ###
 
 class _DateFormat(object):
     """Format definition for parsing dates"""
@@ -141,16 +157,3 @@ def read_date(string, lax=False, rejectPre1970=False, american=False):
         #warn("Exception on reading datetime %s:\n%s\n%s" % (string, e, trace))
         if lax: return None
         else: raise
-
-def setup_logging():
-    loggers = [logging.getLogger("amcatscraping")]
-    handlers = [logging.StreamHandler(sys.stdout)]
-    
-    for handler in handlers:
-        handler.setLevel(logging.INFO)
-
-    for logger in loggers:
-        logger.propagate = False
-        logger.setLevel(logging.INFO)
-        for handler in handlers:
-            logger.addHandler(handler)
