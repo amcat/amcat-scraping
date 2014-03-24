@@ -236,6 +236,6 @@ class PCMScraper(LoginMixin, PropertyCheckMixin, OpenerMixin, UnitScraper, DateR
 
     _props = {
         'defaults' : {},
-        'required' : ['date','headline','text'],
-        'expected' : ['section','pagenr','author']
+        'required' : ['date','text'],
+        'expected' : ['section','pagenr','author','headline']
         }

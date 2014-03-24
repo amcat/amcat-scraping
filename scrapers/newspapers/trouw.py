@@ -21,18 +21,17 @@ from __future__ import unicode_literals, print_function
 
 import pcm
 
-class AlgemeenDagbladScraper(pcm.PCMScraper):
+class TrouwScraper(pcm.PCMScraper):
     def __init__(self,*args,**kwargs):
-        super(AlgemeenDagbladScraper, self).__init__(*args, **kwargs)
-        self._props['defaults']['medium'] = 'Algemeen Dagblad'
-        self._props['defaults']['insertscript'] = 'AlgemeenDagbladScraper'
+        super(TrouwScraper, self).__init__(*args, **kwargs)
+        self._props['defaults']['medium'] = "Trouw"
+        self._props['defaults']['insertscript'] = 'TrouwScraper'
 
-    domain = "ad.nl"
-    paper_id = 8001
-    context_id = "AD"
-
+    domain = "trouw.nl"
+    paper_id = 8004
+    context_id = "NL"
 
 if __name__ == '__main__':
     from amcatscraping.scraping.tools import setup_logging
     setup_logging()
-    AlgemeenDagbladScraper().run()
+    TrouwScraper().run()
