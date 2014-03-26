@@ -42,8 +42,11 @@ class Scraper(object):
                    self.options['api_user'],
                    self.options['api_password'])
         log.info("...done.")
+        return articles
+
 
     def run_async(self):
+        """Run the scraper in an independent process"""
         run_scraper.delay(self)
 
     def _scrape(self):
@@ -104,6 +107,9 @@ class DateRangeScraper(Scraper):
                 articles.remove(a)
         return articles
 
+class LoginError(Exception):
+    """Exception for login failure"""
+    pass
 
 class LoginMixin(object):
     """Logs in to the resource before scraping"""
@@ -117,11 +123,15 @@ class LoginMixin(object):
     def _scrape(self, *args, **kwargs):
         username = self.options['username']
         password = self.options['password']
-        if not self._login(username, password):
-            raise Exception("Login failed")
+        try:
+            assert self._login(username, password)
+        except LoginError:
+            log.exception("login failed")
+            raise
         return super(LoginMixin, self)._scrape(*args, **kwargs)
 
     def _login(self, username, password):
+        # Should return True if successful, otherwise raise an error
         raise NotImplementedError()
 
 
