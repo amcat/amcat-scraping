@@ -7,28 +7,36 @@ from amcatscraping.celery.tasks import run_scraper
 from amcatscraping.scraping.opener import Opener
 from amcatclient.api import AmcatAPI
 
+def mkdate(datestring):
+    return datetime.strptime(datestring, '%Y-%m-%d').date()
+
 class Scraper(object):
-    def __init__(self, *args,**kwargs):
-        parser = self._make_parser()
-        if args or kwargs: #not invoked from CLI
-            to_parse = [str(a) for a in args]
-            for key, value in kwargs.items():
-                to_parse.append("--" + key)
-                if not type(value) == bool:
-                    to_parse.append(value)
-            arguments = parser.parse_args(to_parse)
+    def __init__(self, **kwargs):
+        if kwargs: #not invoked from CLI
+            self.options = kwargs
         else:
-            arguments = parser.parse_args()
-        self.options = vars(arguments)
+            arguments = self._make_parser().parse_args()
+            self.options = vars(arguments)
 
     def _make_parser(self):
         """Build a parser to interpret the arguments given"""
         parser = argparse.ArgumentParser()
-        parser.add_argument("project",type=int)
-        parser.add_argument("articleset",type=int)
-        parser.add_argument("api_host")
-        parser.add_argument("api_user")
-        parser.add_argument("api_password")
+        subparsers = parser.add_subparsers(dest='command')
+        parser_run = subparsers.add_parser('run')
+        parser_test = subparsers.add_parser('test')
+
+        for p in [parser_run,parser_test]:
+            p.add_argument("project",type=int)
+            p.add_argument('--username')
+            p.add_argument('--password')
+            p.add_argument('--first_date',type=mkdate)
+            p.add_argument('--last_date',type=mkdate)
+
+        parser_run.add_argument("articleset",type=int)
+        parser_run.add_argument("api_host")
+        parser_run.add_argument("api_user")
+        parser_run.add_argument("api_password")
+
         return parser
 
     def run(self, input = None):
@@ -36,14 +44,17 @@ class Scraper(object):
         articles = list(self._scrape())
         log.info("...postprocessing...")
         articles = self._postprocess(articles)
-        log.info("...saving...")
-        self._save(articles, 
-                   self.options['api_host'],
-                   self.options['api_user'],
-                   self.options['api_password'])
-        log.info("...done.")
+        if 'command' in self.options and self.options['command'] == 'test':
+            n = len(articles)
+            log.info("scraper returned {n} articles".format(**locals()))
+        else:
+            log.info("...saving.")
+            self._save(
+                articles, 
+                self.options['api_host'],
+                self.options['api_user'],
+                self.options['api_password'])
         return articles
-
 
     def run_async(self):
         """Run the scraper in an independent process"""
@@ -55,8 +66,12 @@ class Scraper(object):
 
     def _postprocess(self, articles):
         """Space to do something with the unsaved articles that the scraper provided"""
-        articles = [a for a in articles if a]
-        return articles
+        out = []
+        for a in articles:
+            if a:
+                a['insertscript'] = self.__class__.__name__
+                out.append(a)
+        return out
 
     def _save(self, articles, *auth):
         api = AmcatAPI(*auth)
@@ -88,22 +103,15 @@ class DateRangeScraper(Scraper):
     """
     def __init__(self, *args, **kwargs):
         super(DateRangeScraper, self).__init__(*args, **kwargs)
+        assert self.options['first_date'] and self.options['last_date']
         n_days = (self.options['last_date'] - self.options['first_date']).days
         self.dates = [self.options['first_date'] + timedelta(days = x) for x in range(n_days + 1)]
-
-    def _make_parser(self):
-        parser = super(DateRangeScraper, self)._make_parser()
-        def mkdate(datestring):
-            return datetime.strptime(datestring, '%Y-%m-%d').date()
-        parser.add_argument('first_date',type=mkdate)
-        parser.add_argument('last_date',type=mkdate)
-        return parser
 
     def _postprocess(self, articles):
         articles = super(DateRangeScraper, self)._postprocess(articles)
         for a in articles:
             if not self.options['first_date'] <= a['date'] <= self.options['last_date']:
-                warnings.warn("Not saving '{a}': it is of an incorrect date ({a[date]})".format(**locals()))
+                warnings.warn("Not saving '{a}': it is of an incorrect date ({a[date]}).".format(**locals()))
                 articles.remove(a)
         return articles
 
@@ -114,24 +122,18 @@ class LoginError(Exception):
 class LoginMixin(object):
     """Logs in to the resource before scraping"""
 
-    def _make_parser(self):
-        parser = super(LoginMixin, self)._make_parser()
-        parser.add_argument('username')
-        parser.add_argument('password')
-        return parser
+    def __init__(self,*args,**kwargs):
+        super(LoginMixin,self).__init__(*args,**kwargs)
+        assert self.options['username'] and self.options['password']
 
     def _scrape(self, *args, **kwargs):
         username = self.options['username']
         password = self.options['password']
-        try:
-            assert self._login(username, password)
-        except LoginError:
-            log.exception("login failed")
-            raise
+        # Please ensure _login returns True on success
+        assert self._login(username, password) 
         return super(LoginMixin, self)._scrape(*args, **kwargs)
 
     def _login(self, username, password):
-        # Should return True if successful, otherwise raise an error
         raise NotImplementedError()
 
 
@@ -194,5 +196,3 @@ class PropertyCheckMixin(object):
         for prop in self._props['expected']:
             assert any([article.get(prop) for article in articles])
 
-if __name__ == "__main__":
-    s = Scraper()

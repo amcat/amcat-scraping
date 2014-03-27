@@ -1,33 +1,47 @@
-"""Keeps a tiny database for registering scrapers and their arguments"""
+"""Keeps a tiny database for registering scrapers, their arguments and other useful info about them"""
 
-import dbm, argparse, json
+import dbm, pprint, argparse, cPickle as pickle
 
 class DB(object):
     def __init__(self):
         self.db = dbm.open('scrapers','c')
 
     def items(self):
-        return [(k,json.loads(self.db[k])) for k in self.db.keys()]
+        return [(k,pickle.loads(self.db[k])) for k in self.db.keys()]
 
     def list(self):
-        print(self.items())
+        pprint.pprint(self.items())
 
-    def add(self, classpath, run_daily, active, **kwargs):
-        assert 'articleset' in kwargs and kwargs['articleset']
-        assert 'project' in kwargs and kwargs['project']
-        if not kwargs.get('label'):
-            kwargs['label'] = classpath
-        kwargs.update({'run_daily' : run_daily, 'active' : active})
-        self.db[classpath] = json.dumps(kwargs)
+    def add(self, classpath, run_daily, active, label = None, **arguments):
+        assert 'articleset' in arguments and arguments['articleset']
+        assert 'project' in arguments and arguments['project']
+
+        info = {'classpath':classpath,
+                'run_daily':run_daily,
+                'active':active,
+                'label':label,
+                'arguments':arguments,
+                'runs':[]}
+        if not label:
+            info['label'] = classpath
+
+        self.db[classpath] = pickle.dumps(info)
             
     def update(self, classpath, **kwargs):
-        item = dict(json.loads(self.db[classpath]).items() + kwargs.items())
-        self.db[classpath] = json.dumps(item)
+        item = dict(pickle.loads(self.db[classpath]).items() + kwargs.items())
+        self.db[classpath] = pickle.dumps(item)
+        self.db.close()
+        self.db = dbm.open('scrapers','w')
 
     def delete(self, classpath):
         """Consider setting 'active = False' instead of deleting"""
         del self.db[classpath]
 
+    def __getitem__(self, classpath):
+        return pickle.loads(self.db[classpath])
+
+    def __setitem__(self, classpath, info):
+        self.db[classpath] = pickle.dumps(info)
 
 def argparser():
     parser = argparse.ArgumentParser()
@@ -47,6 +61,7 @@ def argparser():
     parser_update.add_argument('--active',type=bool)
 
     for p in [parser_add,parser_update]:
+        p.add_argument('--label')
         p.add_argument('--articleset',type=int)
         p.add_argument('--project',type=int)
         p.add_argument('--username')

@@ -16,7 +16,7 @@ def parse_form(form):
     return {inp.get('name') : inp.get('value', '').encode('utf-8') for inp in form.cssselect('input')}
 
 def setup_logging():
-    loggers = [logging.getLogger("amcatscraping")]
+    loggers = [logging.getLogger("amcatscraping"),logging.getLogger("__main__")]
     handlers = [logging.StreamHandler(sys.stdout)]
     
     for handler in handlers:
