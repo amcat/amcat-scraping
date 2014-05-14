@@ -192,7 +192,9 @@ class PropertyCheckMixin(object):
     def _check_properties(self, articles):
         log.info("Checking properties...")
         for prop in self._props['required']:
-            assert all([article.get(prop) for article in articles])
+            if not all([article.get(prop) for article in articles]):
+                raise ValueError("{prop} missing in at least one article".format(**locals()))
         for prop in self._props['expected']:
-            assert any([article.get(prop) for article in articles])
+            if not any([article.get(prop) for article in articles]):
+                raise ValueError("{prop} missing in all articles".format(**locals()))
 
