@@ -1,14 +1,14 @@
-from amcatscraping.scraping.scraper import (LoginMixin, PropertyCheckMixin, OpenerMixin, 
+from amcatscraping.scraping.scraper import (LoginMixin, PropertyCheckMixin,
                                             UnitScraper, DateRangeScraper)
 from datetime import date
 from urlparse import urljoin
 
-class NRCScraper(LoginMixin, PropertyCheckMixin, OpenerMixin, UnitScraper, DateRangeScraper):
+class NRCScraper(LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper):
     nrc_version = "NN"
 
     def _login(self, username, password):
-        post = "username={}&password={}".format(username,password)
-        response = self.open("https://login.nrc.nl/login", post)
+        post = {'username' : username, 'password' : password}
+        response = self.session.post("https://login.nrc.nl/login", post)
         if response.url.endswith("/overzicht"):
             return True
 
@@ -16,18 +16,18 @@ class NRCScraper(LoginMixin, PropertyCheckMixin, OpenerMixin, UnitScraper, DateR
         for date in self.dates:
             for doc in self.__getsections(date):
                 for a in doc.cssselect("ul.article-links li > a"):
-                    yield urljoin(a.base_url, a.get('href'))
+                    yield self.session.get(a)
 
     def __getsections(self,date):
         monthminus = date.month - 1
         url1 = "http://digitaleeditie.nrc.nl/digitaleeditie/{self.nrc_version}/{date.year}/{monthminus}/{date.year}{date.month:02d}{date.day:02d}___/section1.html".format(**locals())
-        doc1 = self.open_html(url1)
+        doc1 = self.session.get_html(url1)
         yield doc1
         for a in doc1.cssselect("ul.main-sections li:not(.active) a.section-link"):
-            yield self.navigate_html(a)
+            yield self.session.get_html(a)
 
     def _scrape_unit(self, url):
-        doc = self.open_html(url)
+        doc = self.session.get_html(url)
         datestr = url.split("/")[7].strip("_")
         location = doc.cssselect("em.location")
         person = doc.cssselect("p.by span.person")

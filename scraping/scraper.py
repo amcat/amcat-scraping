@@ -4,7 +4,7 @@ import warnings
 import argparse
 
 from amcatscraping.celery.tasks import run_scraper
-from amcatscraping.scraping.opener import Opener
+from amcatscraping.scraping.httpsession import Session
 from amcatclient.api import AmcatAPI
 
 def mkdate(datestring):
@@ -17,6 +17,7 @@ class Scraper(object):
         else:
             arguments = self._make_parser().parse_args()
             self.options = vars(arguments)
+        self.session = Session() #http session
 
     def _make_parser(self):
         """Build a parser to interpret the arguments given"""
@@ -135,25 +136,6 @@ class LoginMixin(object):
 
     def _login(self, username, password):
         raise NotImplementedError()
-
-
-class OpenerMixin(object):
-    """
-    Provides a HTTP opener and some convenience functions
-    """
-    def __init__(self, *args, **kwargs):
-        self.opener = Opener()
-        super(OpenerMixin, self).__init__(*args, **kwargs)
-
-    def open(self, *args, **kwargs):
-        return self.opener.open(*args, **kwargs)
-
-    def open_html(self, *args, **kwargs):
-        return self.opener.open_html(*args, **kwargs)
-
-    def navigate_html(self, *args, **kwargs):
-        return self.opener.navigate_html(*args, **kwargs)
-
 
 class PropertyCheckMixin(object):
     """

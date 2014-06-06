@@ -1,4 +1,4 @@
-from amcatscraping.scraping.scraper import LoginMixin, PropertyCheckMixin, OpenerMixin, UnitScraper, DateRangeScraper
+from amcatscraping.scraping.scraper import LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper
 from amcatscraping.scraping.tools import parse_form
 
 import datetime
@@ -34,7 +34,7 @@ def get_pubdate(paper):
     return datetime.date(**pd)
 
 
-class PCMScraper(LoginMixin, PropertyCheckMixin, OpenerMixin, UnitScraper, DateRangeScraper):
+class PCMScraper(LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper):
     def __init__(self, *args, **kwargs):
         super(PCMScraper, self).__init__(*args, **kwargs)
 

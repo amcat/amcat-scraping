@@ -1,6 +1,7 @@
 from html2text import html2text as html_to_text
 from lxml import html, etree
-import logging, sys, re
+from urlparse import urljoin
+import logging, sys, re, datetime
 
 ### MISC ###
 
@@ -70,6 +71,20 @@ _DATEFORMATS = (
     _DateFormat("(\w+) (\d{1,2}), (\d{4})",          3,1,2,True),
     _DateFormat("(\d{1,2})[-/](\d{1,2})[-/](\d{2})", 3,2,1,swapamerican=True),
 )
+
+MONTHNAMES = (('jan', 'janv', 'ener', 'gennaio'),
+              ('feb', 'fevr', 'feve', 'f\xe9vrier'),
+              ('mar', 'mrt', 'maa', 'mar', 'm\xe4rz', 'maerz'),
+              ('apr', 'avri', 'abri'),
+              ('may', 'mai', 'mei', 'mayo', 'maggio', 'm\xe4rz'),
+              ('jun', 'juin','giugno'),
+              ('jul', 'juil', 'luglio'),
+              ('aug', 'aout', 'agos', u'ao\xfbt'),
+              ('sep', 'setem', 'settembre'),
+              ('oct', 'okt', 'out', 'ottobre'),
+              ('nov'),
+              ('dec', 'dez', 'dici', 'dicembre', 'd\xe9cembre'))
+
 
 def _monthnr(monthname):
     """Try to get a month number corresponding to the month

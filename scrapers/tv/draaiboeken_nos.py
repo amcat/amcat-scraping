@@ -50,7 +50,7 @@ def cleanUpDraaiboek(text):
 class DraaiboekenScraper(PropertyCheckMixin, UnitScraper):
 
     def __init__(self, *args, **kargs):
-        super(DraaiboekenScraper, self).__init__()
+        super(DraaiboekenScraper, self).__init__(*args, **kwargs)
         login_info = Scraper.objects.get(class_name='DraaiboekenScraper')
         self.articleset = self.options['articleset']
         self._ftp = ftplib.FTP('ftp.tt888.nl')
