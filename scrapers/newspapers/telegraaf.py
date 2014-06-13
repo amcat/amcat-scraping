@@ -36,11 +36,12 @@ class TelegraafScraper(LoginMixin,PropertyCheckMixin,UnitScraper,DateRangeScrape
         if section == "Advertentie":
             return
         url = "http://www.telegraaf.nl/telegraaf-i/article/" + article_id
-        print(url)
         article = {'url' : url,'metastring' : {},'pagenr' : pagenr,
                    'section' : section, 'date' : date}
         data = self.session.get(url).json()
         article['headline'] = data['headline']
+        if not article['headline']:
+            return
 
         body = {k : "" for dic in data['body'] for k in dic}
         for dic in data['body']:
@@ -49,11 +50,14 @@ class TelegraafScraper(LoginMixin,PropertyCheckMixin,UnitScraper,DateRangeScrape
                 else: body[k] += "\n\n" + v
             
         article['text'] = body.get('lead') or "" + (body.get('paragraph') or body.get('byline') or "")
+        if not article['text']:
+            return
         article['metastring'].update({'subheadline' : body.get('subheadline'),
                                       'media_caption' : body.get('media-caption')})
         for line in article['text'].split("\n\n"):
             if line.startswith("door "):
                 article['author'] = line.lstrip("door ")
+            
             if re.match('[A-Z ]+, [a-z]+', line):
                 article['metastring']['dateline'] = line
 
