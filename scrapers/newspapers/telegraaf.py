@@ -58,7 +58,7 @@ class TelegraafScraper(LoginMixin,PropertyCheckMixin,UnitScraper,DateRangeScrape
             if line.startswith("door "):
                 article['author'] = line.lstrip("door ")
             
-            if re.match('[A-Z ]+, [a-z]+', line):
+            if re.search('[A-Z ]+, [a-z]+', line):
                 article['metastring']['dateline'] = line
 
         return article

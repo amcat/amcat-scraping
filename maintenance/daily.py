@@ -2,15 +2,17 @@
 import logging; log = logging.getLogger(__name__)
 from importlib import import_module
 import argparse
-from datetime import date
+from datetime import date, datetime
 
 from amcatscraping.maintenance.db import DB
+
+mkdate = lambda x: date(*map(int,x.split("-")))
 
 class Daily(object):
     db = DB()
     def __init__(self):
         parser = argparse.ArgumentParser()
-        parser.add_argument("date")
+        parser.add_argument("date",type=mkdate)
         parser.add_argument("api_host")
         parser.add_argument("api_user")
         parser.add_argument("api_password")
@@ -19,9 +21,10 @@ class Daily(object):
     def run(self):
         result = []
         api_info = [(key,self.options[key]) for key in ['api_host','api_user','api_password']]
+        misc_options = [('first_date',self.options['date']),('last_date',self.options['date'])]
         for classpath, info in self.db.items():
             scraper = self._get_class(classpath)
-            arguments = dict(info['arguments'].items() + api_info)
+            arguments = dict(info['arguments'].items() + api_info + misc_options)
             s = scraper(**arguments)
             try: articles = s.run()
             except Exception as e:
@@ -31,7 +34,8 @@ class Daily(object):
 
             runs = self.db[classpath]['runs']
             runs.append(
-                {'day':date.today(),
+                {'time_ran':datetime.now(),
+                 'arguments':arguments,
                  'n_articles':len(articles),
                  'exception':e})
             self.db.update(classpath,runs = runs)

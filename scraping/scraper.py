@@ -177,7 +177,8 @@ class PropertyCheckMixin(object):
         for prop in self._props['required']:
             if not all([article.get(prop) or article['metastring'].get(prop) for article in articles]):
                 raise ValueError("{prop} missing in at least one article".format(**locals()))
-        for prop in self._props['expected']:
-            if not any([article.get(prop) or article['metastring'].get(prop) for article in articles]):
-                raise ValueError("{prop} missing in all articles".format(**locals()))
+        if articles:
+            for prop in self._props['expected']:
+                if not any([article.get(prop) or article['metastring'].get(prop) for article in articles]):
+                    raise ValueError("{prop} missing in all articles".format(**locals()))
 
