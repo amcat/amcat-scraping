@@ -165,6 +165,7 @@ class PropertyCheckMixin(object):
     def _add_defaults(self, articles):
         log.info("Filling in defaults...")
         self._props['defaults']['project'] = self.options['project']
+        self._props['defaults']['insertscript'] = type(self).__name__
         for prop, default in self._props['defaults'].items():
             for article in articles:
                 if not article.get(prop):
