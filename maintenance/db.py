@@ -1,10 +1,13 @@
 """Keeps a tiny database for registering scrapers, their arguments and other useful info about them"""
 
-import dbm, pprint, argparse, cPickle as pickle
+import dbm, pprint, argparse, os, cPickle as pickle
+
+PYTHONPATH = os.environ.get('PYTHONPATH')
+
 
 class DB(object):
     def __init__(self):
-        self.db = dbm.open('scrapers','c')
+        self.db = dbm.open(PYTHONPATH + "/amcatscraping/maintenance/scrapers",'c')
 
     def items(self):
         return [(k,pickle.loads(self.db[k])) for k in self.db.keys()]
@@ -31,7 +34,7 @@ class DB(object):
         item = dict(pickle.loads(self.db[classpath]).items() + kwargs.items())
         self.db[classpath] = pickle.dumps(item)
         self.db.close()
-        self.db = dbm.open('scrapers','w')
+        self.db = dbm.open(PYTHONPATH + '/amcatscraping/maintenance/scrapers','w')
 
     def delete(self, classpath):
         """Consider setting 'active = False' instead of deleting"""

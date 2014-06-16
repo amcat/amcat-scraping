@@ -41,15 +41,15 @@ class Scraper(object):
         return parser
 
     def run(self, input = None):
-        log.info("getting articles...")
+        log.info("\tgetting articles...")
         articles = list(self._scrape())
-        log.info("...postprocessing...")
+        log.info("\t...postprocessing...")
         articles = self._postprocess(articles)
         if 'command' in self.options and self.options['command'] == 'test':
             n = len(articles)
-            log.info("scraper returned {n} articles".format(**locals()))
+            log.info("\tscraper returned {n} articles".format(**locals()))
         else:
-            log.info("...saving.")
+            log.info("\t...saving.")
             self._save(
                 articles, 
                 self.options['api_host'],
@@ -70,7 +70,7 @@ class Scraper(object):
         out = []
         for a in articles:
             if a:
-                a['insertscript'] = self.__class__.__name__
+                a['insertscript'] = type(self).__name__
                 out.append(a)
         return out
 
@@ -92,7 +92,7 @@ class UnitScraper(Scraper):
             try:
                 yield self._scrape_unit(unit)
             except Exception:
-                log.exception("_scrape_unit failed")
+                log.exception("\t_scrape_unit failed")
                 continue
 
 
@@ -163,7 +163,7 @@ class PropertyCheckMixin(object):
         return articles
         
     def _add_defaults(self, articles):
-        log.info("Filling in defaults...")
+        log.info("\tFilling in defaults...")
         self._props['defaults']['project'] = self.options['project']
         self._props['defaults']['insertscript'] = type(self).__name__
         for prop, default in self._props['defaults'].items():
@@ -173,7 +173,7 @@ class PropertyCheckMixin(object):
         return articles
 
     def _check_properties(self, articles):
-        log.info("Checking properties...")
+        log.info("\tChecking properties...")
         for prop in self._props['required']:
             if not all([article.get(prop) or article['metastring'].get(prop) for article in articles]):
                 raise ValueError("{prop} missing in at least one article".format(**locals()))
