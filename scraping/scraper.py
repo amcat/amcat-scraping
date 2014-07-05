@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import logging; log = logging.getLogger(__name__)
 import warnings
 import argparse
@@ -41,15 +41,15 @@ class Scraper(object):
         return parser
 
     def run(self, input = None):
-        log.info("getting articles...")
+        log.info("\tgetting articles...")
         articles = list(self._scrape())
-        log.info("...postprocessing...")
+        log.info("\t...found {} articles. postprocessing...".format(len(articles)))
         articles = self._postprocess(articles)
         if 'command' in self.options and self.options['command'] == 'test':
             n = len(articles)
-            log.info("scraper returned {n} articles".format(**locals()))
+            log.info("\tscraper returned {n} articles".format(**locals()))
         else:
-            log.info("...saving.")
+            log.info("\t...saving.")
             self._save(
                 articles, 
                 self.options['api_host'],
@@ -70,16 +70,28 @@ class Scraper(object):
         out = []
         for a in articles:
             if a:
-                a['insertscript'] = self.__class__.__name__
+                a['insertscript'] = type(self).__name__
                 out.append(a)
         return out
 
     def _save(self, articles, *auth):
+        articles = self.__stringify_dates(articles)
         api = AmcatAPI(*auth)
         api.create_articles(
             self.options['project'],
             self.options['articleset'],
             json_data = articles)
+
+    def __stringify_dates(self, articles):
+        for article in articles:
+            for key, value in article.items():
+                if type(value) in (date, datetime):
+                    value = str(value)
+                    article[key] = value
+                if type(key) in (date, datetime):
+                    article[str(key)] = value
+                    del article[key]
+        return articles
 
 
 class UnitScraper(Scraper):
@@ -92,7 +104,7 @@ class UnitScraper(Scraper):
             try:
                 yield self._scrape_unit(unit)
             except Exception:
-                log.exception("_scrape_unit failed")
+                log.exception("\t_scrape_unit failed")
                 continue
 
 
@@ -163,7 +175,7 @@ class PropertyCheckMixin(object):
         return articles
         
     def _add_defaults(self, articles):
-        log.info("Filling in defaults...")
+        log.info("\tFilling in defaults...")
         self._props['defaults']['project'] = self.options['project']
         self._props['defaults']['insertscript'] = type(self).__name__
         for prop, default in self._props['defaults'].items():
@@ -173,7 +185,7 @@ class PropertyCheckMixin(object):
         return articles
 
     def _check_properties(self, articles):
-        log.info("Checking properties...")
+        log.info("\tChecking properties...")
         for prop in self._props['required']:
             if not all([article.get(prop) or article['metastring'].get(prop) for article in articles]):
                 raise ValueError("{prop} missing in at least one article".format(**locals()))

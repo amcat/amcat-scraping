@@ -60,11 +60,11 @@ class PCMScraper(LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper):
                               domain=self.domain)
 
         # Login
-        login_page = self.open_html(url)
+        login_page = self.get_html(url)
         form = parse_form(login_page)
         form['username'] = username
         form['password'] = password
-        login_page = self.open(
+        login_page = self.get(
             url, urllib.urlencode(form)
         )
         # Resolve ticket_url and save it

@@ -19,15 +19,14 @@ class Daily(object):
         self.options = vars(parser.parse_args())
 
     def run(self):
-        result = []
+        result = {}
         api_info = [(key,self.options[key]) for key in ['api_host','api_user','api_password']]
         misc_options = [('first_date',self.options['date']),('last_date',self.options['date'])]
         for classpath, info in self.db.items():
-            log.info(classpath)
-            scraper = self._get_class(classpath)
+            log.info("Running {}".format(classpath))
             arguments = dict(info['arguments'].items() + api_info + misc_options)
-            s = scraper(**arguments)
-            try: articles = s.run()
+            scraper = self._get_class(classpath)(**arguments)
+            try: articles = scraper.run()
             except Exception as e:
                 log.exception("running scraper failed")
                 articles = []
@@ -40,7 +39,7 @@ class Daily(object):
                  'n_articles':len(articles),
                  'exception':e})
             self.db.update(classpath,runs = runs)
-            result.append((scraper,articles))
+            result[scraper] = articles
         self._evaluate(result)
 
     def _get_class(self, path):
