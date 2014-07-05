@@ -126,7 +126,7 @@ class PCMScraper(LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper):
         article['date'] = index['date']
         article['section'] = index['section']
         article['pagenr'] = index['pagenr']
-        if article['text']:
+        if article['text'] and article['headline']:
             return article
 
     def _get_latest(self):
@@ -234,6 +234,6 @@ class PCMScraper(LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper):
 
     _props = {
         'defaults' : {},
-        'required' : ['date','text'],
-        'expected' : ['section','pagenr','author','headline']
+        'required' : ['date','text','headline'],
+        'expected' : ['section','pagenr','author']
         }
