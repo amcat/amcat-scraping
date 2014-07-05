@@ -16,7 +16,7 @@ class NRCScraper(LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper):
         for date in self.dates:
             for doc in self.__getsections(date):
                 for a in doc.cssselect("ul.article-links li > a"):
-                    yield self.session.get(urljoin(doc.base_url, a.get('href')))
+                    yield urljoin(a.base_url,a.get('href'))
 
     def __getsections(self,date):
         monthminus = date.month - 1
@@ -24,7 +24,7 @@ class NRCScraper(LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper):
         doc1 = self.session.get_html(url1)
         yield doc1
         for a in doc1.cssselect("ul.main-sections li:not(.active) a.section-link"):
-            yield self.session.get_html(urljoin(doc1.base_url,a.get('href')))
+            yield self.session.get_html(a)
 
     def _scrape_unit(self, url):
         doc = self.session.get_html(url)
