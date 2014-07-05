@@ -60,15 +60,15 @@ class PCMScraper(LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper):
                               domain=self.domain)
 
         # Login
-        login_page = self.get_html(url)
+        login_page = self.session.get_html(url)
         form = parse_form(login_page)
         form['username'] = username
         form['password'] = password
-        login_page = self.get(
-            url, urllib.urlencode(form)
+        login_page = self.session.post(
+            url, data = form
         )
         # Resolve ticket_url and save it
-        self.ticket_url = login_page.geturl()
+        self.ticket_url = login_page.url
         
         if 'ticket' not in self.ticket_url:
             return False
@@ -119,7 +119,7 @@ class PCMScraper(LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper):
                     yield (index,art)
 
     def _scrape_unit(self, (index,art)):
-        article = {}
+        article = {'metastring':{}}
         article['author'] = art['author'][:100] if art['author'] else ''
         article['headline'] = art['title']
         article['text'] = "\n\n".join([el['text'] for el in art['bodyElements']])
@@ -164,13 +164,11 @@ class PCMScraper(LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper):
         data = bytes(remoting.encode(envelope).read())
         url = AMFURL.format(domain=self.domain)
 
-        req = urllib2.Request(url, data, headers={
-            'Content-Type' : 'application/x-amf'
-        })
 
+        
         resp = remoting.decode(
-            self.open(req).read()
-        )
+            self.session.get(url, data = data, headers = {'Content-Type':'application/x-amf'}).content
+            )
 
         return resp
 
