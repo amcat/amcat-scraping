@@ -23,6 +23,7 @@ class Daily(object):
         api_info = [(key,self.options[key]) for key in ['api_host','api_user','api_password']]
         misc_options = [('first_date',self.options['date']),('last_date',self.options['date'])]
         for classpath, info in self.db.items():
+            log.info(classpath)
             scraper = self._get_class(classpath)
             arguments = dict(info['arguments'].items() + api_info + misc_options)
             s = scraper(**arguments)
@@ -44,6 +45,7 @@ class Daily(object):
 
     def _get_class(self, path):
         modulename, classname = path.rsplit(".",1)
+        log.debug("module: " + modulename + ", class: " + classname)
         module = import_module(modulename)
         return getattr(module,classname)
 

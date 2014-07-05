@@ -1,6 +1,7 @@
 """Keeps a tiny database for registering scrapers, their arguments and other useful info about them"""
 
-import dbm, pprint, argparse, cPickle as pickle
+import dbm, os, pprint, argparse, cPickle as pickle
+from importlib import import_module
 
 class DB(object):
     def __init__(self):
@@ -15,6 +16,9 @@ class DB(object):
     def add(self, classpath, run_daily, active, label = None, **arguments):
         assert 'articleset' in arguments and arguments['articleset']
         assert 'project' in arguments and arguments['project']
+        modulepath,classname = classpath.rsplit(".",1)
+        module = import_module(modulepath)
+        getattr(module, classname) #check if class exists in module
 
         info = {'classpath':classpath,
                 'run_daily':run_daily,
