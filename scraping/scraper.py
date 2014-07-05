@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import logging; log = logging.getLogger(__name__)
 import warnings
 import argparse
@@ -43,7 +43,7 @@ class Scraper(object):
     def run(self, input = None):
         log.info("\tgetting articles...")
         articles = list(self._scrape())
-        log.info("\t...postprocessing...")
+        log.info("\t...found {} articles. postprocessing...".format(len(articles)))
         articles = self._postprocess(articles)
         if 'command' in self.options and self.options['command'] == 'test':
             n = len(articles)
@@ -75,11 +75,23 @@ class Scraper(object):
         return out
 
     def _save(self, articles, *auth):
+        articles = self.__stringify_dates(articles)
         api = AmcatAPI(*auth)
         api.create_articles(
             self.options['project'],
             self.options['articleset'],
             json_data = articles)
+
+    def __stringify_dates(self, articles):
+        for article in articles:
+            for key, value in article.items():
+                if type(value) in (date, datetime):
+                    value = str(value)
+                    article[key] = value
+                if type(key) in (date, datetime):
+                    article[str(key)] = value
+                    del article[key]
+        return articles
 
 
 class UnitScraper(Scraper):
