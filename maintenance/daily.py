@@ -37,7 +37,7 @@ class Daily(object):
                 {'time_ran':datetime.now(),
                  'arguments':arguments,
                  'n_articles':len(articles),
-                 'exception':e})
+                 'exception':e and e.message})
             self.db.update(classpath,runs = runs)
             result[scraper] = articles
         self._evaluate(result)

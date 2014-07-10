@@ -1,6 +1,6 @@
 """Keeps a tiny database for registering scrapers, their arguments and other useful info about them"""
 
-import dbm, os, pprint, argparse, cPickle as pickle
+import dbm, os, pprint, argparse, dill as pickle
 from importlib import import_module
 
 PYTHONPATH = os.environ.get('PYTHONPATH')
@@ -10,7 +10,8 @@ class DB(object):
         self.db = dbm.open(PYTHONPATH + "/amcatscraping/maintenance/scrapers",'c')
 
     def items(self):
-        return [(k,pickle.loads(self.db[k])) for k in self.db.keys()]
+        for k in self.db.keys():
+            yield (k,pickle.loads(self.db[k]))
 
     def list(self):
         pprint.pprint(self.items())
