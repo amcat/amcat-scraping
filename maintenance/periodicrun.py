@@ -12,7 +12,7 @@ class PeriodicRun(object):
     db = DB()
     def __init__(self):
         parser = argparse.ArgumentParser()
-        parser.add_argument("period",choices = ['hourly','daily','weekly'])
+        parser.add_argument("period",choices = ['hourly','daily','weekly','never'])
         parser.add_argument("date",type=mkdate)
         parser.add_argument("api_host")
         parser.add_argument("api_user")
@@ -27,23 +27,11 @@ class PeriodicRun(object):
             if info['period'] != self.options['period']:
                 continue
             arguments = dict(info['arguments'].items() + api_info + misc_options)
-            scraper = self._get_class(classpath)(**arguments)
+            articles, exception, tstart, tfinish = self._run_scraper(classpath, arguments)
+            self._log_run(classpath, time_started = tstart, time_finished = tfinish,
+                          arguments = arguments, n_articles = len(articles), exception = exception)
 
-            log.info("Running {}".format(classpath))
-            try: articles = scraper.run()
-            except Exception as e:
-                log.exception("running scraper failed")
-                articles = []
-            else: e = None
-
-            runs = self.db[classpath]['runs']
-            runs.append(
-                {'time_ran':datetime.now(),
-                 'arguments':arguments,
-                 'n_articles':len(articles),
-                 'exception':e})
-            self.db.update(classpath,runs = runs)
-            result[scraper] = articles
+            result[classpath] = articles
         self._evaluate(result)
 
     def _get_class(self, path):
@@ -51,6 +39,26 @@ class PeriodicRun(object):
         log.debug("module: " + modulename + ", class: " + classname)
         module = import_module(modulename)
         return getattr(module,classname)
+
+    def _run_scraper(self, classpath, arguments):
+        scraper = self._get_class(classpath)(**arguments)
+        log.info("Running {}".format(classpath))
+        tstart = datetime.now()
+        try: 
+            articles = scraper.run()
+        except Exception as e:
+            log.exception("running scraper failed")
+            articles = []
+        else: e = None
+        tfinish = datetime.now()
+        return articles, e, tstart, tfinish
+
+    def _log_run(self, classpath, **details):
+        runs = self.db[classpath]['runs']
+        runs.append(
+            {key : value for key, value in details.items()}
+        )
+        self.db.update(classpath,runs = runs)
 
     def _evaluate(self, result):
         """Did the scrapers run as expected?"""

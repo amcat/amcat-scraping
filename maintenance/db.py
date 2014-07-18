@@ -19,6 +19,7 @@ class DB(object):
     def add(self, classpath, run_daily, active, label = None, **arguments):
         assert 'articleset' in arguments and arguments['articleset']
         assert 'project' in arguments and arguments['project']
+        assert period in ('hourly','daily','weekly','never')
         modulepath,classname = classpath.rsplit(".",1)
         module = import_module(modulepath)
         getattr(module, classname) #check if class exists in module
