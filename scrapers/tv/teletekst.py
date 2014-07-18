@@ -11,7 +11,7 @@ class TeletekstScraper(PropertyCheckMixin, UnitScraper):
     def _scrape_unit(self, url):
         doc = self.session.get_html(url)
         article = {
-            'url' : doc.url,
+            'url' : doc.base_url,
             'text' : tools.html2text(doc.cssselect("#article-content p")),
             'headline' : doc.cssselect("#article h1")[0].text_content().strip(),
             'date' : tools.read_date(doc.cssselect("abbr.page-last-modified")[0].text),

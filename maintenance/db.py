@@ -14,9 +14,9 @@ class DB(object):
             yield (k,pickle.loads(self.db[k]))
 
     def list(self):
-        pprint.pprint(self.items())
+        pprint.pprint(list(self.items()))
 
-    def add(self, classpath, run_daily, active, label = None, **arguments):
+    def add(self, classpath, period, active, label = None, **arguments):
         assert 'articleset' in arguments and arguments['articleset']
         assert 'project' in arguments and arguments['project']
         assert period in ('hourly','daily','weekly','never')
@@ -25,7 +25,7 @@ class DB(object):
         getattr(module, classname) #check if class exists in module
 
         info = {'classpath':classpath,
-                'run_daily':run_daily,
+                'period':period,
                 'active':active,
                 'label':label,
                 'arguments':arguments,
@@ -62,7 +62,7 @@ def argparser():
     for p in [parser_add,parser_update,parser_delete]:
         p.add_argument('classpath')
 
-    parser_add.add_argument('run_daily',type=bool)
+    parser_add.add_argument('period',choices=['hourly','daily','weekly','never'])
     parser_add.add_argument('active',type=bool)
 
     parser_update.add_argument('--run_daily',type=bool)

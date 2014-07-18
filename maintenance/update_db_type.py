@@ -10,5 +10,5 @@ for k in db.keys():
     else:
         val['period'] = 'never'
     del val['run_daily']
-    db[k] = val
+    db[k] = pickle.dumps(val)
     
