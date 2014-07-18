@@ -1,6 +1,6 @@
 """Keeps a tiny database for registering scrapers, their arguments and other useful info about them"""
 
-import dbm, os, pprint, argparse, dill as pickle
+import dbm, os, pprint, argparse, pickle
 from importlib import import_module
 
 PYTHONPATH = os.environ.get('PYTHONPATH')

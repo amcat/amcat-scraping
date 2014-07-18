@@ -12,7 +12,7 @@ class PeriodicRun(object):
     db = DB()
     def __init__(self):
         parser = argparse.ArgumentParser()
-        parser.add_argument("period",choices = ['hourly','daily','weekly','never'])
+        parser.add_argument("period",choices = ['hourly','daily','weekly'])
         parser.add_argument("date",type=mkdate)
         parser.add_argument("api_host")
         parser.add_argument("api_user")
