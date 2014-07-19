@@ -10,4 +10,4 @@ nohup.out
 *.pyc
 
 # Scraper db
-*.db
+scrapers

@@ -1,25 +1,37 @@
 """Keeps a tiny database for registering scrapers, their arguments and other useful info about them"""
 
-import dbm, os, pprint, argparse, pickle
+import gdbm, os, pprint, argparse, pickle
 from importlib import import_module
+from contextlib import contextmanager
 
 PYTHONPATH = os.environ.get('PYTHONPATH')
+assert PYTHONPATH
 
 class DB(object):
-    def __init__(self):
-        self.db = dbm.open(PYTHONPATH + "/amcatscraping/maintenance/scrapers",'c')
+
+    @contextmanager
+    def opendb(self):
+        self.db = gdbm.open(PYTHONPATH + "/amcatscraping/maintenance/scrapers",'cs')
+        try:
+            yield
+        finally:
+            self.db.close()
 
     def items(self):
-        for k in self.db.keys():
-            yield (k,pickle.loads(self.db[k]))
+        with self.opendb():
+            return [(k,pickle.loads(self.db[k])) for k in self.db.keys()]
+                
+    def runcmd(self, command, *args, **kwargs):
+        with self.opendb():
+            getattr(self, command)(*args, **kwargs)
 
-    def list(self):
-        pprint.pprint(list(self.items()))
+    def list(self, verbose=False):
+        if verbose:
+            pprint.pprint(self.items())
+        else:
+            pprint.pprint(self.items(), depth = 3)
 
     def add(self, classpath, period, active, label = None, **arguments):
-        assert 'articleset' in arguments and arguments['articleset']
-        assert 'project' in arguments and arguments['project']
-        assert period in ('hourly','daily','weekly','never')
         modulepath,classname = classpath.rsplit(".",1)
         module = import_module(modulepath)
         getattr(module, classname) #check if class exists in module
@@ -33,54 +45,62 @@ class DB(object):
         if not label:
             info['label'] = classpath
 
-        self.db[classpath] = pickle.dumps(info)
+        with self.opendb():
+            self.db[classpath] = pickle.dumps(info)
             
     def update(self, classpath, **kwargs):
-        item = dict(pickle.loads(self.db[classpath]).items() + kwargs.items())
-        self.db[classpath] = pickle.dumps(item)
-        self.db.close()
-        self.db = dbm.open(PYTHONPATH + '/amcatscraping/maintenance/scrapers','w')
+        with self.opendb():
+            self.db[classpath] = pickle.dumps(dict(pickle.loads(self.db[classpath]).items() + kwargs.items()))
 
     def delete(self, classpath):
         """Consider setting 'active = False' instead of deleting"""
-        del self.db[classpath]
+        with self.opendb():
+            del self.db[classpath]
 
     def __getitem__(self, classpath):
-        return pickle.loads(self.db[classpath])
+        with self.opendb():
+            return pickle.loads(self.db[classpath])
 
     def __setitem__(self, classpath, info):
-        self.db[classpath] = pickle.dumps(info)
+        with self.opendb():
+            self.db[classpath] = pickle.dumps(info)
 
-def argparser():
+def getargparser():
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest='command')
 
+    scraper_props = {
+        ('username','password','label') : {},
+        ('articleset','project') : {'type' : int},
+        ('active',) : {'type' : bool},
+        ('period',) : {'choices':['hourly','daily','weekly','never']},
+        }
+        
     parser_add = subparsers.add_parser('add')
+    parser_add.add_argument('classpath')
+    for names, arguments in scraper_props.items():
+        for name in names:
+            if name in ('username','password','label'):
+                parser_add.add_argument("--" + name, **arguments)
+            else:
+                parser_add.add_argument(name, **arguments)
+
     parser_update = subparsers.add_parser('update')
+    parser_update.add_argument('classpath')
+    for names, arguments in scraper_props.items():
+        for name in names:
+            parser_update.add_argument("--" + name, **arguments)
+
     parser_delete = subparsers.add_parser('delete')
+    parser_delete.add_argument('classpath')
+
     parser_list = subparsers.add_parser('list')
-    for p in [parser_add,parser_update,parser_delete]:
-        p.add_argument('classpath')
-
-    parser_add.add_argument('period',choices=['hourly','daily','weekly','never'])
-    parser_add.add_argument('active',type=bool)
-
-    parser_update.add_argument('--run_daily',type=bool)
-    parser_update.add_argument('--active',type=bool)
-
-    for p in [parser_add,parser_update]:
-        p.add_argument('--label')
-        p.add_argument('--articleset',type=int)
-        p.add_argument('--project',type=int)
-        p.add_argument('--username')
-        p.add_argument('--password')
+    parser_list.add_argument('--verbose')
 
     return parser
 
 if __name__ == "__main__":
     db = DB()
-    parser = argparser()
+    parser = getargparser()
     args = parser.parse_args()
-    call = getattr(db, args.command)
-    del args.command
-    call(**vars(args))
+    db.runcmd(**vars(args))
