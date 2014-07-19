@@ -1,6 +1,5 @@
 from datetime import datetime, timedelta, date
 import logging; log = logging.getLogger(__name__)
-import warnings
 import argparse
 
 from amcatscraping.celery.tasks import run_scraper
@@ -123,9 +122,8 @@ class DateRangeScraper(Scraper):
     def _postprocess(self, articles):
         articles = super(DateRangeScraper, self)._postprocess(articles)
         for a in articles:
-            if not self.options['first_date'] <= a['date'] <= self.options['last_date']:
-                warnings.warn("Not saving '{a}': it is of an incorrect date ({a[date]}).".format(**locals()))
-                articles.remove(a)
+            _date = date.fromordinal(a['date'].toordinal()) #from (datetime or date) to date
+            assert _date in self.dates
         return articles
 
 class LoginError(Exception):
@@ -178,6 +176,7 @@ class PropertyCheckMixin(object):
         log.info("\tFilling in defaults...")
         self._props['defaults']['project'] = self.options['project']
         self._props['defaults']['insertscript'] = type(self).__name__
+        self._props['defaults']['metastring'] = {}
         for prop, default in self._props['defaults'].items():
             for article in articles:
                 if not article.get(prop):
@@ -193,4 +192,3 @@ class PropertyCheckMixin(object):
             for prop in self._props['expected']:
                 if not any([article.get(prop) or article['metastring'].get(prop) for article in articles]):
                     raise ValueError("{prop} missing in all articles".format(**locals()))
-
