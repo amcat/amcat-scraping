@@ -28,20 +28,20 @@ class DB(object):
             add = {
                 ('classpath','--username','--password','--label') : {},
                 ('articleset','project') : {'type' : int},
-                'active' : {'type' : bool},
+                'active' : {'type' : bool, 'const' : True},
                 'period' : {'choices' : ['hourly','daily','weekly','never']},
             },
             update = {
                 ('classpath','--username','--password','--label') : {},
                 ('--articleset','--project') : {'type' : int},
-                '--active' : {'type' : bool},
+                '--active' : {'type' : bool, 'const' : True},
                 '--period' : {'choices' : ['hourly','daily','weekly','never']},
             },
             delete = {
                 'classpath' : {}
             },
             list = {
-                '--verbose' : {'type' : bool}
+                '--verbose' : {'type' : bool, 'const' : True}
             }
         )
         func = getattr(self, arguments['__command__'])
@@ -81,6 +81,11 @@ class DB(object):
         """Consider setting 'active = False' instead of deleting"""
         with self.opendb():
             del self.db[classpath]
+
+    def __iter__(self):
+        with self.opendb():
+            for key in self.db.keys():
+                yield key
 
     def __getitem__(self, classpath):
         with self.opendb():

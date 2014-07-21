@@ -6,9 +6,6 @@ from datetime import date, datetime
 from amcatscraping.maintenance.db import DB
 from amcatscraping.tools import setup_logging, get_arguments
 
-
-mkdate = 
-
 class PeriodicRun(object):
     db = DB()
     def __init__(self):

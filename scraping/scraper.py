@@ -9,6 +9,18 @@ from amcatclient.amcatclient import AmcatAPI
 def mkdate(datestring):
     return datetime.strptime(datestring, '%Y-%m-%d').date()
 
+import __main__, os, sys
+def getpath(cls):
+    """Get class path even if it's __main__"""
+    if cls.__module__ == "__main__":
+        pythonpath = os.environ.get('PYTHONPATH','')
+        filepath = sys.path[0].split(pythonpath,1)[1].strip("/")
+        modulepath = ".".join(filepath.split("/"))
+        filename = os.path.splitext(os.path.basename(__main__.__file__))[0]
+        return modulepath + "." + filename
+    else:
+        return cls.__module__
+
 class Scraper(object):
     def __init__(self, **kwargs):
         if kwargs: #not invoked from CLI
@@ -69,12 +81,12 @@ class Scraper(object):
         out = []
         for a in articles:
             if a:
-                a['insertscript'] = type(self).__name__
+                a['insertscript'] = getpath(self.__class__) + "." + self.__class__.__name__
                 out.append(a)
+        out = self.__stringify_dates(out)
         return out
 
     def _save(self, articles, *auth):
-        articles = self.__stringify_dates(articles)
         api = AmcatAPI(*auth)
         api.create_articles(
             self.options['project'],
@@ -120,10 +132,10 @@ class DateRangeScraper(Scraper):
         self.dates = [self.options['first_date'] + timedelta(days = x) for x in range(n_days + 1)]
 
     def _postprocess(self, articles):
-        articles = super(DateRangeScraper, self)._postprocess(articles)
         for a in articles:
             _date = date.fromordinal(a['date'].toordinal()) #from (datetime or date) to date
             assert _date in self.dates
+        articles = super(DateRangeScraper, self)._postprocess(articles)
         return articles
 
 class LoginError(Exception):
@@ -175,7 +187,6 @@ class PropertyCheckMixin(object):
     def _add_defaults(self, articles):
         log.info("\tFilling in defaults...")
         self._props['defaults']['project'] = self.options['project']
-        self._props['defaults']['insertscript'] = type(self).__name__
         self._props['defaults']['metastring'] = {}
         for prop, default in self._props['defaults'].items():
             for article in articles:

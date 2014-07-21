@@ -1,6 +1,7 @@
 from amcatscraping.scraping.scraper import UnitScraper, PropertyCheckMixin
 from amcatscraping import tools
 
+
 class TeletekstScraper(PropertyCheckMixin, UnitScraper):
     def _get_units(self):
         self.session.get("http://nos.nl")
