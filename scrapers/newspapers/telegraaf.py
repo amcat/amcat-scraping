@@ -1,5 +1,5 @@
 from amcatscraping.scraping.scraper import UnitScraper, DateRangeScraper, LoginMixin, PropertyCheckMixin
-from amcatscraping.scraping.tools import parse_form
+from amcatscraping.tools import parse_form, setup_logging()
 import re
 
 from datetime import date
@@ -72,6 +72,5 @@ class TelegraafScraper(LoginMixin,PropertyCheckMixin,UnitScraper,DateRangeScrape
         }
 
 if __name__ == "__main__":
-    from amcatscraping.scraping.tools import setup_logging
     setup_logging()
     TelegraafScraper().run()

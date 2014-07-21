@@ -2,6 +2,7 @@ from html2text import html2text as html_to_text
 from lxml import html, etree
 from urlparse import urljoin
 import logging, sys, re, datetime
+import argparse
 
 ### MISC ###
 
@@ -28,6 +29,43 @@ def setup_logging():
         logger.setLevel(logging.INFO)
         for handler in handlers:
             logger.addHandler(handler)
+
+def get_arguments(__first__=None, **variations):
+    """wrapper for argparse module
+    provide either one dict or different named dicts for different subparsers
+    sample usage:
+    get_arguments({
+        'integers' : {
+            'metavar' : 'N',
+            'type' : int,
+            'nargs' : '+',
+            'help' : 'an integer for the accumulator'},
+        '--sum' : {
+            'dest' : 'accumulate',
+            'action' : 'store_const',
+            'const' : sum,
+            'default' : max,
+            'help' : 'sum the integers (default: find the max)'}
+    })
+    """
+    assert bool(__first__) ^ bool(variations)
+
+    def addarguments(parser,_dict):
+        for args, options in _dict.items():
+            if not hasattr(args,'__iter__'):
+                args = (args,)
+            for arg in args:
+                parser.add_argument(arg, **options)
+
+    parser = argparse.ArgumentParser()
+    if __first__:
+        addarguments(parser, __first__)
+    elif variations:
+        subparsers = parser.add_subparsers(dest='__command__')
+        for cmd, args in variations.items():
+            parser_cmd = subparsers.add_parser(cmd)
+            addarguments(parser_cmd, args)
+    return vars(parser.parse_args())
 
 ### PARSE DATES ###
 
@@ -172,3 +210,5 @@ def read_date(string, lax=False, rejectPre1970=False, american=False):
         #warn("Exception on reading datetime %s:\n%s\n%s" % (string, e, trace))
         if lax: return None
         else: raise
+
+

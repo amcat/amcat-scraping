@@ -1,7 +1,7 @@
 from datetime import timedelta
 
 from amcatscraping.scraping.scraper import UnitScraper, DateRangeScraper, PropertyCheckMixin
-from amcatscraping.scraping.tools import read_date, html2text, setup_logging
+from amcatscraping.tools import read_date, html2text, setup_logging
 
 import random, string
 def id_generator(length, chars = string.ascii_lowercase + string.digits):

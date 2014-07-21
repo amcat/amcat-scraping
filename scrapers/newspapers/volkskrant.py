@@ -32,6 +32,6 @@ class VolkskrantScraper(pcm.PCMScraper):
     context_id = "NL"
 
 if __name__ == '__main__':
-    from amcatscraping.scraping.tools import setup_logging
+    from amcatscraping.tools import setup_logging
     setup_logging()
     VolkskrantScraper().run()

@@ -115,7 +115,7 @@ class tt888Scraper(PropertyCheckMixin, UnitScraper):
 
 
 if __name__ == '__main__':
-    from amcatscraping.scraping.tools import setup_logging
+    from amcatscraping.tools import setup_logging
     setup_logging()
     tt888Scraper().run()
     

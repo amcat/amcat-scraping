@@ -1,23 +1,24 @@
 """Running scrapers daily"""
 import logging; log = logging.getLogger(__name__)
 from importlib import import_module
-import argparse
 from datetime import date, datetime
 
 from amcatscraping.maintenance.db import DB
+from amcatscraping.tools import setup_logging, get_arguments
 
-mkdate = lambda x: date(*map(int,x.split("-")))
+
+mkdate = 
 
 class PeriodicRun(object):
     db = DB()
     def __init__(self):
-        parser = argparse.ArgumentParser()
-        parser.add_argument("period",choices = ['hourly','daily','weekly'])
-        parser.add_argument("date",type=mkdate)
-        parser.add_argument("api_host")
-        parser.add_argument("api_user")
-        parser.add_argument("api_password")
-        self.options = vars(parser.parse_args())
+        self.options = get_arguments({
+            'period' : {
+                'choices' : ['hourly','daily','weekly']},
+            'date' : {
+                'type' : lambda x: date(*map(int,x.split("-")))},
+            ('api_host', 'api_user', 'api_password') : {
+            }})
 
     def run(self):
         result = {}
@@ -65,6 +66,5 @@ class PeriodicRun(object):
         #TBA
 
 if __name__ == "__main__":
-    from amcatscraping.scraping.tools import setup_logging
     setup_logging()
     PeriodicRun().run()
