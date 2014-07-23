@@ -1,7 +1,8 @@
 from html2text import html2text as html_to_text
 from lxml import html, etree
 from urlparse import urljoin
-import logging, sys, re, datetime
+import logging, sys, re
+from datetime import datetime, date
 import argparse
 
 ### MISC ###
@@ -67,7 +68,12 @@ def get_arguments(__first__=None, **variations):
             addarguments(parser_cmd, args)
     return vars(parser.parse_args())
 
-### PARSE DATES ###
+### DATES ###
+
+def todate(d):
+    return date.fromordinal(d.toordinal())
+def todatetime(d):
+    return datetime.fromordinal(d.toordinal())
 
 class _DateFormat(object):
     """Format definition for parsing dates"""
@@ -203,7 +209,7 @@ def read_date(string, lax=False, rejectPre1970=False, american=False):
                              % (string, date))
 
         if not time: time = (0, 0, 0)
-        return datetime.datetime(*(date + time))
+        return datetime(*(date + time))
     except Exception,e:
         import traceback
         trace = traceback.format_exc()

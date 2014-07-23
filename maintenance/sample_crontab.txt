@@ -1,0 +1,14 @@
+PYTHONPATH='/home/$USER'
+
+# timed_actions.py is intended to run each minute. We have it append it's output to amcatscraping/maintenancelog.txt
+API_HOST='http://foo.bar'
+API_USER='foo'
+API_PASSWORD='bar'
+* * * * * python timed_actions.py $API_HOST $API_USER $API_PASSWORD --print_errors >> '$PYTHONPATH/amcatscraping/maintenancelog.txt'
+
+# dailyreview is intended to run daily, preferably when the daily scrapers are done
+SMTP_SERVER='localhost'
+EMAIL_LOGIN='blah@gmail.com'
+EMAIL_PASSWORD='secret'
+MAIL_TO='blah@gmail.com foo@gmail.com bar@gmail.com baz@gmail.com'
+0 12 * * * python dailyreview.py $API_HOST $API_USER $API_PASSWORD $MAIL_TO --smtp_server $SMTP_SERVER --email_login $EMAIL_LOGIN --email_password $EMAIL_PASSWORD

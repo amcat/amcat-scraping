@@ -23,9 +23,9 @@ class NuScraper(PropertyCheckMixin, UnitScraper, DateRangeScraper):
             assert doc.cssselect("#searchlist")
             for div in doc.cssselect("#searchlist div.subarticle"):
                 date = read_date(div.cssselect("span.date")[0].text)
-                if date.date() in checkdates:
+                if self.mindatetime <= date <= self.maxdatetime:
                     yield div.cssselect("a")[0].get('href')
-                elif date.date() < min(self.dates):
+                elif date < self.mindatetime:
                     return
             assert pagenr < 1000000 # infinite loop
 

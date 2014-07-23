@@ -104,9 +104,10 @@ class PCMScraper(LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper):
         return True
 
     def _get_units(self):
+        latest = self._get_latest()
         for date in self.dates:
             # Get urls for last 6 newspapers
-            page = self._get_latest().get(date)
+            page = latest.get(date)
             if page is None:
                 raise ValueError("Could not find paper for {date}".format(**locals()))
 

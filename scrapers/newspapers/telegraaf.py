@@ -4,7 +4,6 @@ import re
 
 from datetime import date
 def mkdate(string):
-    # Should be date() default...
     return date(*map(int,string.split("-")))
 
 

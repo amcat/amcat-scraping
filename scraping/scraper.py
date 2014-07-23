@@ -1,13 +1,13 @@
-from datetime import datetime, timedelta, date
+from datetime import timedelta, date, datetime
 import logging; log = logging.getLogger(__name__)
-import argparse
+from collections import OrderedDict
+
 
 from amcatscraping.celery.tasks import run_scraper
 from amcatscraping.scraping.httpsession import Session
-from amcatclient.amcatclient import AmcatAPI
+from amcatscraping.tools import todatetime, todate, get_arguments, read_date
 
-def mkdate(datestring):
-    return datetime.strptime(datestring, '%Y-%m-%d').date()
+from amcatclient.amcatclient import AmcatAPI
 
 import __main__, os, sys
 def getpath(cls):
@@ -23,37 +23,31 @@ def getpath(cls):
 
 class Scraper(object):
     def __init__(self, **kwargs):
-        if kwargs: #not invoked from CLI
-            self.options = kwargs
-        else:
-            arguments = self._make_parser().parse_args()
-            self.options = vars(arguments)
+        self.options = kwargs or self._get_arguments()
         self.session = Session() #http session
 
-    def _make_parser(self):
-        """Build a parser to interpret the arguments given"""
-        parser = argparse.ArgumentParser()
-        subparsers = parser.add_subparsers(dest='command')
-        parser_run = subparsers.add_parser('run')
-        parser_test = subparsers.add_parser('test')
+    def _get_arguments(self):
+        arglist = self._get_arg_list()
+        return get_arguments(OrderedDict(arglist))
 
-        for p in [parser_run,parser_test]:
-            p.add_argument("project",type=int)
-            p.add_argument('--username')
-            p.add_argument('--password')
-            p.add_argument('--first_date',type=mkdate)
-            p.add_argument('--last_date',type=mkdate)
-
-        parser_run.add_argument("articleset",type=int)
-        parser_run.add_argument("api_host")
-        parser_run.add_argument("api_user")
-        parser_run.add_argument("api_password")
-
-        return parser
+    def _get_arg_list(self):
+        args = [
+            ('project',{'type' : int}),
+            ('articleset',{'type' : int}),
+            (('api_host','api_user','api_password'), {}),
+            ('--print_errors',{'type' : bool, 'const' : True})
+        ]
+        return args
 
     def run(self, input = None):
-        log.info("\tgetting articles...")
-        articles = list(self._scrape())
+        log.info("\tgetting articles ")
+        articles = []
+        for a in self._scrape():
+            articles.append(a)
+            sys.stdout.write('.')
+            sys.stdout.flush()
+        print
+
         log.info("\t...found {} articles. postprocessing...".format(len(articles)))
         articles = self._postprocess(articles)
         if 'command' in self.options and self.options['command'] == 'test':
@@ -83,17 +77,17 @@ class Scraper(object):
             if a:
                 a['insertscript'] = getpath(self.__class__) + "." + self.__class__.__name__
                 out.append(a)
-        out = self.__stringify_dates(out)
         return out
 
     def _save(self, articles, *auth):
         api = AmcatAPI(*auth)
+        articles = self._stringify_dates(articles)
         api.create_articles(
             self.options['project'],
             self.options['articleset'],
             json_data = articles)
 
-    def __stringify_dates(self, articles):
+    def _stringify_dates(self, articles):
         for article in articles:
             for key, value in article.items():
                 if type(value) in (date, datetime):
@@ -114,8 +108,12 @@ class UnitScraper(Scraper):
         for unit in self._get_units():
             try:
                 yield self._scrape_unit(unit)
-            except Exception:
-                log.exception("\t_scrape_unit failed")
+            except Exception as e:
+                if self.options['print_errors']:
+                    log.exception(e)
+                else:
+                    sys.stdout.write('x')
+                    sys.stdout.flush()
                 continue
 
 
@@ -125,29 +123,40 @@ class DateRangeScraper(Scraper):
     Provides a first_date and last_date option which children classes can use
     to select data from their resource.
     """
+    def _get_arg_list(self):
+        args = super(DateRangeScraper, self)._get_arg_list()
+        args.append((('min_datetime','max_datetime'),
+                     {'type' : lambda x: todatetime(read_date(x))}))
+        return args
+
     def __init__(self, *args, **kwargs):
         super(DateRangeScraper, self).__init__(*args, **kwargs)
-        assert self.options['first_date'] and self.options['last_date']
-        n_days = (self.options['last_date'] - self.options['first_date']).days
-        self.dates = [self.options['first_date'] + timedelta(days = x) for x in range(n_days + 1)]
+        n_days = (self.options['max_datetime'] - self.options['min_datetime']).days
+        self.dates = map(todate,
+                         [self.options['min_datetime'] + timedelta(days = x) for x in range(n_days + 1)])
+        self.mindatetime = self.options['min_datetime']
+        self.maxdatetime = self.options['max_datetime']
 
     def _postprocess(self, articles):
-        for a in articles:
-            _date = date.fromordinal(a['date'].toordinal()) #from (datetime or date) to date
-            assert _date in self.dates
         articles = super(DateRangeScraper, self)._postprocess(articles)
+        for a in articles:
+            _date = todatetime(a['date'])
+            assert self.mindatetime <= _date <= self.maxdatetime
         return articles
+
 
 class LoginError(Exception):
     """Exception for login failure"""
     pass
 
+
 class LoginMixin(object):
     """Logs in to the resource before scraping"""
 
-    def __init__(self,*args,**kwargs):
-        super(LoginMixin,self).__init__(*args,**kwargs)
-        assert self.options['username'] and self.options['password']
+    def _get_arg_list(self):
+        args = super(LoginMixin, self)._get_arg_list()
+        args.append((('username','password'), {}))
+        return args
 
     def _scrape(self, *args, **kwargs):
         username = self.options['username']
