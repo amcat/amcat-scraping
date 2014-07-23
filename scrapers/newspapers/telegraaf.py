@@ -1,5 +1,5 @@
 from amcatscraping.scraping.scraper import UnitScraper, DateRangeScraper, LoginMixin, PropertyCheckMixin
-from amcatscraping.tools import parse_form, setup_logging()
+from amcatscraping.tools import parse_form, setup_logging
 import re
 
 from datetime import date
