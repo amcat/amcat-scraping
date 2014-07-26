@@ -24,6 +24,8 @@ class TimedActions(object):
         self.datetime = datetime.now().replace(second=0,microsecond=0)
 
     def run(self):
+        now = datetime.now()
+        log.info("{d.year}-{d.month}-{d.day}T{d.hour}:{d.minute}".format(d=now))
         yesterday = todatetime(datetime.today() - timedelta(days = 1))
         for classpath, info in self.db.items():
             # if scraper is periodic and it's cron entry matches the time
