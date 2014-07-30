@@ -1,3 +1,8 @@
+AmCAT-Scraping
+==============
+
+A seperate repository for scraping to AmCAT.
+
 To install:
 ```
 cd /home/somedir
