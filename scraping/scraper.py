@@ -35,7 +35,7 @@ class Scraper(object):
             ('project',{'type' : int}),
             ('articleset',{'type' : int}),
             (('api_host','api_user','api_password'), {}),
-            ('--print_errors',{'type' : bool, 'const' : True})
+            ('--print_errors',{'action' : 'store_const', 'const' : True})
         ]
         return args
 
@@ -194,7 +194,7 @@ class PropertyCheckMixin(object):
         return articles
         
     def _add_defaults(self, articles):
-        log.info("\tFilling in defaults...")
+        log.info("\t\tFilling in defaults...")
         self._props['defaults']['project'] = self.options['project']
         self._props['defaults']['metastring'] = {}
         for prop, default in self._props['defaults'].items():
@@ -204,7 +204,7 @@ class PropertyCheckMixin(object):
         return articles
 
     def _check_properties(self, articles):
-        log.info("\tChecking properties...")
+        log.info("\t\tChecking properties...")
         for prop in self._props['required']:
             if not all([article.get(prop) or article['metastring'].get(prop) for article in articles]):
                 raise ValueError("{prop} missing in at least one article".format(**locals()))

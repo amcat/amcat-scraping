@@ -1,2 +1,5 @@
+celery
+html2text
 mailer
 croniter
+cssselect

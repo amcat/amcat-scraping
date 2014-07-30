@@ -3,6 +3,7 @@ from lxml import html, etree
 from urlparse import urljoin
 import logging, sys, re
 from datetime import datetime, date
+import time
 import argparse
 
 ### MISC ###
@@ -73,7 +74,7 @@ def get_arguments(__first__=None, **variations):
 def todate(d):
     return date.fromordinal(d.toordinal())
 def todatetime(d):
-    return datetime.fromordinal(d.toordinal())
+    return datetime.fromtimestamp(time.mktime(d.timetuple()))
 
 class _DateFormat(object):
     """Format definition for parsing dates"""
