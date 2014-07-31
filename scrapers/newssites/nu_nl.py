@@ -29,6 +29,7 @@ class NuScraper(PropertyCheckMixin, UnitScraper, DateRangeScraper):
                     return
             assert pagenr < 1000000 # infinite loop
 
+
     def _set_js_cookies(self):
         idlength = 10
         self.session.cookies.update({
@@ -49,7 +50,7 @@ class NuScraper(PropertyCheckMixin, UnitScraper, DateRangeScraper):
         article = {
             'text' : html2text(content.cssselect("div.content")),
             'headline' : content.cssselect("h1")[0].text,
-            'section' : url.split("/")[4],
+            'section' : url.split("/")[3],
             'date' : date,
             'url' : url,
             }

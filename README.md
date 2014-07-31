@@ -16,7 +16,7 @@ git clone https://github.com/vanatteveldt/amcatclient.git
 #    ...
 
 # Install dependencies
-sudo pip install celery html2text mailer croniter cssselect
+sudo pip install celery html2text mailer croniter cssselect pyamf
 
 # To run scripts in amcatscraping, PYTHONPATH needs to be set to the directory it's in:
 export PYTHONPATH='/home/somedir'
