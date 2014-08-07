@@ -40,27 +40,28 @@ class Scraper(object):
         return args
 
     def run(self, input = None):
-        log.info("\tgetting articles ")
+        log.info("\tScraping articles...")
         articles = []
+        sys.stdout.write('\t')
         for a in self._scrape():
             articles.append(a)
             sys.stdout.write('.')
             sys.stdout.flush()
         print
 
-        log.info("\t...found {} articles. postprocessing...".format(len(articles)))
+        log.info("\tFound {} articles. postprocessing...".format(len(articles)))
         articles = self._postprocess(articles)
         if 'command' in self.options and self.options['command'] == 'test':
             n = len(articles)
             log.info("\tscraper returned {n} articles".format(**locals()))
         else:
-            log.info("\t...saving.")
-            self._save(
+            log.info("\tSaving.")
+            saved = self._save(
                 articles, 
                 self.options['api_host'],
                 self.options['api_user'],
                 self.options['api_password'])
-        return articles
+        return saved
 
     def run_async(self):
         """Run the scraper in an independent process"""
@@ -82,13 +83,18 @@ class Scraper(object):
     def _save(self, articles, *auth):
         api = AmcatAPI(*auth)
         articles = self._stringify_dates(articles) #quickfix. todo: fix amcatclient so dates are jsonified
-        articles[0]['insertscript'] = "0" * 1000
-        articles = [articles[0]]
         response = api.create_articles(
             self.options['project'],
             self.options['articleset'],
             json_data = articles)
-        print(response)
+        ids = [article['id'] for article in response]
+        if not any(ids):
+            raise RuntimeError("None of the articles were saved.")
+        if not all(ids):
+            log.warning("\tWarning: Only {}/{} articles were saved.".format(
+                len(filter(None,ids)),
+                len(ids)))
+        return filter(lambda ar: ar['id'], response)
 
     def _stringify_dates(self, articles):
         for article in articles:
