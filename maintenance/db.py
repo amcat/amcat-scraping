@@ -60,8 +60,8 @@ class DB(object):
         with self.opendb():
             func(**arguments)
 
-    def list(self, depth = 2):
-        pprint.pprint(self.items(), depth = 3)
+    def list(self, depth = 3):
+        pprint.pprint(self.items(), depth = depth)
 
     def add(self, classpath, timetype, cron, active, label = None, **arguments):
         modulepath,classname = classpath.rsplit(".",1)
