@@ -14,5 +14,5 @@ git clone https://github.com/vanatteveldt/amcatclient.git $INSTALLDIR/amcatclien
 sudo pip install -r $INSTALLDIR/amcatclient/requirements.txt
 
 # To run scripts in amcatscraping, PYTHONPATH needs to be set to the directory it's in:
-echo 'export PYTHONPATH=$PYTHONPATH:$HOME' >> ~/.bashrc
+echo 'export PYTHONPATH=$PYTHONPATH:$INSTALLDIR' >> ~/.bashrc
 ```
