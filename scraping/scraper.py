@@ -82,7 +82,6 @@ class Scraper(object):
 
     def _save(self, articles, *auth):
         api = AmcatAPI(*auth)
-        articles = self._stringify_dates(articles) #quickfix. todo: fix amcatclient so dates are jsonified
         response = api.create_articles(
             self.options['project'],
             self.options['articleset'],
@@ -95,17 +94,6 @@ class Scraper(object):
                 len(filter(None,ids)),
                 len(ids)))
         return filter(lambda ar: ar['id'], response)
-
-    def _stringify_dates(self, articles):
-        for article in articles:
-            for key, value in article.items():
-                if type(value) in (date, datetime):
-                    value = str(value)
-                    article[key] = value
-                if type(key) in (date, datetime):
-                    article[str(key)] = value
-                    del article[key]
-        return articles
 
 
 class UnitScraper(Scraper):
