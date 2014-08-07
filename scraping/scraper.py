@@ -81,11 +81,14 @@ class Scraper(object):
 
     def _save(self, articles, *auth):
         api = AmcatAPI(*auth)
-        articles = self._stringify_dates(articles)
-        api.create_articles(
+        articles = self._stringify_dates(articles) #quickfix. todo: fix amcatclient so dates are jsonified
+        articles[0]['insertscript'] = "0" * 1000
+        articles = [articles[0]]
+        response = api.create_articles(
             self.options['project'],
             self.options['articleset'],
             json_data = articles)
+        print(response)
 
     def _stringify_dates(self, articles):
         for article in articles:
