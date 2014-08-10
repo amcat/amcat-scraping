@@ -43,9 +43,7 @@ class TimedActions(object):
             else: run = False
             if run:
                 arguments['print_errors'] = self.options.get('print_errors')
-                articles, exception, tstart, tfinish = self._run_scraper(classpath, arguments)
-                self._log_run(classpath, time_started = tstart, time_finished = tfinish,
-                              arguments = arguments, n_articles = len(articles), exception = exception)
+                run_scraper_and_log(classpath, arguments, self.db)
 
     def _cron_match(self, cron_str):
         parser = croniter(cron_str, self.datetime)
@@ -53,29 +51,6 @@ class TimedActions(object):
         if parser.get_prev(datetime) == self.datetime:
             return True
 
-    def _run_scraper(self, classpath, arguments):
-        scraper = self._get_class(classpath)(**arguments)
-        log.info("Running {}".format(classpath))
-        tstart = datetime.now()
-        try:
-            articles = scraper.run()
-        except Exception as e:
-            articles = []
-            log.exception("running scraper failed")
-        else: e = None
-        tfinish = datetime.now()
-        return articles, e, tstart, tfinish
-
-    def _get_class(self, path):
-        modulename, classname = path.rsplit(".",1)
-        log.debug("module: " + modulename + ", class: " + classname)
-        module = import_module(modulename)
-        return getattr(module,classname)
-
-    def _log_run(self, classpath, **details):
-        runs = self.db[classpath]['runs']
-        runs.append(details)
-        self.db.update(classpath, runs = runs)
 
 if __name__ == "__main__":
     setup_logging()

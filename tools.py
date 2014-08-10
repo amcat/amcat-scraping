@@ -5,6 +5,7 @@ import logging, sys, re
 from datetime import datetime, date
 import time
 import argparse
+import logging; log = logging.getLogger(__name__)
 
 ### MISC ###
 
@@ -68,6 +69,39 @@ def get_arguments(__first__=None, **variations):
             parser_cmd = subparsers.add_parser(cmd)
             addarguments(parser_cmd, args)
     return vars(parser.parse_args())
+
+
+from importlib import import_module
+def run_scraper_and_log(classpath, arguments, db):
+    """
+    Shortcut to getting a scraper class, running it, and 
+    logging the results to the db
+    """
+    # Get the scraper class
+    modulename, classname = classpath.rsplit(".",1)
+    module = import_module(modulename)
+    scraper = getattr(module,classname)
+    # Run the scraper
+    log.info("Running {}".format(classpath))
+    tstart = datetime.now()
+    try:
+        articles = scraper(**arguments).run()
+    except Exception as e:
+        articles = []
+        log.exception("running scraper failed")
+    else: e = None
+    tfinish = datetime.now()
+
+    # Log the details to the db
+    details = {
+        'time_started' : tstart,
+        'time_finished' : tfinish,
+        'arguments' : arguments,
+        'n_articles' : len(articles),
+        'exception' : e}
+    runs = db[classpath]['runs']
+    runs.append(details)
+    db.update(classpath, runs = runs)
 
 ### DATES ###
 
