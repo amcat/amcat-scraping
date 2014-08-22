@@ -71,3 +71,7 @@ $ python scrapers/tv/teletekst.py 1 1 http://amcat.vu.nl secret secret
 ```
 
 Articleset 1 on amcat.vu.nl now contains 15 articles of Teletekst.
+
+### Creating (coding) a scraper
+
+TBA
