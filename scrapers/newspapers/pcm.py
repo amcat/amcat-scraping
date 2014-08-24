@@ -106,7 +106,6 @@ class PCMScraper(LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper):
     def _get_units(self):
         latest = self._get_latest()
         for date in self.dates:
-            # Get urls for last 6 newspapers
             page = latest.get(date)
             if page is None:
                 continue

@@ -6,6 +6,9 @@ A seperate repository for scraping to AmCAT.
 To install:
 ```
 export INSTALLDIR=$HOME #edit this line if you want to install in a different directory
+export AMCAT_HOST=http://amcat.vu.nl
+export AMCAT_USER=xxx
+export AMCAT_PASSWORD=xxx
 
 git clone https://github.com/amcat/amcat-scraping.git $INSTALLDIR/amcatscraping
 git clone https://github.com/vanatteveldt/amcatclient.git $INSTALLDIR/amcatclient
@@ -18,7 +21,7 @@ echo >> ~/.bashrc
 echo 'export PYTHONPATH=$PYTHONPATH':$INSTALLDIR >> ~/.bashrc
 
 # To run scrapers at their scheduled time, we use a script that should run every minute. Add it to cron:
-(crontab -l ; echo "* * * * * python "$INSTALLDIR/amcatscraping/maintenance/timed_actions.py)| crontab -
+(crontab -l ; echo "* * * * * python "$INSTALLDIR/amcatscraping/maintenance/timed_actions.py $AMCAT_HOST $AMCAT_USER $AMCAT_PASSWORD)| crontab -
 ```
 
 ### Different types of scrapers

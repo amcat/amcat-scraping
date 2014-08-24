@@ -4,3 +4,4 @@ mailer
 croniter
 cssselect
 pyamf
+httplib2

@@ -19,10 +19,14 @@ def is_cron(string):
         return string
 
 class DB(object):
+    def __init__(self):
+        location = os.path.realpath(
+            os.path.join(os.getcwd(), os.path.dirname(__file__)))
+        self.dbpath = os.path.join(location, 'scrapers')
 
     @contextmanager
     def opendb(self):
-        self.db = gdbm.open(PYTHONPATH + "/amcatscraping/maintenance/scrapers",'cs')
+        self.db = gdbm.open(self.dbpath,'cs')
         try:
             yield
         finally:
