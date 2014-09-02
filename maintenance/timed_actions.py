@@ -4,7 +4,9 @@ from collections import OrderedDict
 from importlib import import_module
 from croniter import croniter
 
-from amcatscraping.tools import todatetime, get_arguments, setup_logging
+from amcatscraping.tools import (todatetime, get_arguments,
+                                 setup_logging, read_date, 
+                                 run_scraper_and_log)
 from amcatscraping.maintenance.db import DB
 
 class TimedActions(object):
@@ -18,15 +20,16 @@ class TimedActions(object):
             ('api_host',{}),
             ('api_user',{}),
             ('api_password',{}),
-            ('--print_errors',{'action':'store_const', 'const':True})
+            ('--print_errors',{'action':'store_const', 'const':True}),
+            ("--time",{"type":read_date})
         ]))
         self.api_info = {key : self.options[key] for key in ('api_host','api_user','api_password')}
-        self.datetime = datetime.now().replace(second=0,microsecond=0)
+        self.datetime = self.options["time"] or datetime.now().replace(second=0,microsecond=0)
 
     def run(self):
         now = datetime.now()
         log.info("{d.year}-{d.month}-{d.day}T{d.hour}:{d.minute}".format(d=now))
-        yesterday = todatetime(datetime.today() - timedelta(days = 1))
+        yesterday = self.datetime - timedelta(days = 1)
         for classpath, info in self.db.items():
             # if scraper is periodic and it's cron entry matches the time
             if info['timetype'] == 'periodic' and self._cron_match(info['cron']):
@@ -37,7 +40,7 @@ class TimedActions(object):
             elif info['timetype'] == 'daterange' and (self.datetime.hour, self.datetime.minute) == (2,0):
                 run = True
                 arguments = dict(info['arguments'].items() + self.api_info.items()
-                                 + [('min_datetime', yesterday),
+                                 + [('min_datetime', yesterday.replace(hour = 0, minute = 0, second = 0)),
                                     ('max_datetime', yesterday.replace(hour = 23, minute = 59))])
             # if neither, don't run
             else: run = False

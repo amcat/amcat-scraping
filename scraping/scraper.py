@@ -87,7 +87,7 @@ class Scraper(object):
             self.options['articleset'],
             json_data = articles)
         ids = [article['id'] for article in response]
-        if not any(ids):
+        if not any(ids) and ids:
             raise RuntimeError("None of the articles were saved.")
         if not all(ids):
             log.warning("\tWarning: Only {}/{} articles were saved.".format(
