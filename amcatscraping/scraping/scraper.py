@@ -3,11 +3,11 @@ import logging; log = logging.getLogger(__name__)
 from collections import OrderedDict
 
 
-from amcatscraping.celery.tasks import run_scraper
-from amcatscraping.scraping.httpsession import Session
-from amcatscraping.tools import todatetime, todate, get_arguments, read_date
+from ..celery.tasks import run_scraper
+from .httpsession import Session
+from ..tools import todatetime, todate, get_arguments, read_date
 
-from amcatclient.amcatclient import AmcatAPI
+from amcatclient import AmcatAPI
 
 import __main__, os, sys
 def getpath(cls):
@@ -57,7 +57,7 @@ class Scraper(object):
         else:
             log.info("\tSaving.")
             saved = self._save(
-                articles, 
+                articles,
                 self.options['api_host'],
                 self.options['api_user'],
                 self.options['api_password'])
@@ -159,7 +159,7 @@ class LoginMixin(object):
         username = self.options['username']
         password = self.options['password']
         # Please ensure _login returns True on success
-        assert self._login(username, password) 
+        assert self._login(username, password)
         return super(LoginMixin, self)._scrape(*args, **kwargs)
 
     def _login(self, username, password):
@@ -183,13 +183,13 @@ class PropertyCheckMixin(object):
     'required' means all articles should have this property
     'expected' means at least one article should have this property
     """
-    
+
     def _postprocess(self, articles):
         articles = super(PropertyCheckMixin, self)._postprocess(articles)
         articles = self._add_defaults(articles)
         self._check_properties(articles)
         return articles
-        
+
     def _add_defaults(self, articles):
         log.info("\t\tFilling in defaults...")
         self._props['defaults']['project'] = self.options['project']
