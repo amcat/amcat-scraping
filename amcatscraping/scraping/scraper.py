@@ -1,7 +1,7 @@
 from datetime import timedelta, date, datetime
 import logging; log = logging.getLogger(__name__)
 from collections import OrderedDict
-
+import os.path
 
 from ..celery.tasks import run_scraper
 from .httpsession import Session
@@ -13,9 +13,15 @@ import __main__, os, sys
 def getpath(cls):
     """Get class path even if it's __main__"""
     if cls.__module__ == "__main__":
-        pythonpath = os.environ.get('PYTHONPATH','')
-        filepath = sys.path[0].split(pythonpath,1)[1].strip("/")
-        modulepath = ".".join(filepath.split("/"))
+        import __main__
+        # guess the module name from pythonpath
+        filepath = os.path.abspath(sys.path[0])
+        for path in sys.path[1:]:
+            path = os.path.abspath(path)
+            if filepath.startswith(path):
+                filepath = os.path.relpath(filepath, path)
+                break
+        modulepath = filepath.replace("/", ".").strip(".")
         filename = os.path.splitext(os.path.basename(__main__.__file__))[0]
         return modulepath + "." + filename
     else:
