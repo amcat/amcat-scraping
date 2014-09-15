@@ -106,14 +106,20 @@ class MarokkoScraper(Scraper):
             return 1
 
 
-    def get_post(self, base_url, thread_id, li):
+    def get_post(self, base_url, thread_id, thread_name, li):
         """Create an 'amcat' article dict from a li element"""
         url = urljoin(base_url, li.cssselect("a.postcounter")[0].get('href'))
+        postno = int(li.cssselect("a.postcounter")[0].text_content().strip("#"))
+        if postno > 1:
+            headline = "{thread_name} [reply #{postno}]".format(**locals())
+        else:
+            headline = thread_name
         return {
+            'headline': headline,
             'date' : _parse_date(li.cssselect("span.date")[0].text_content()).isoformat(),
             'author' : li.cssselect("a.username")[0].text_content().strip(),
             'text' : li.cssselect("blockquote.postcontent")[0].text_content().strip(),
-            'page' : li.cssselect("a.postcounter")[0].text_content().strip("#"),
+            'page' : postno,
             'children' : [],
             'medium' : self.medium_name,
             'project' : self.options['project'],
@@ -126,9 +132,10 @@ class MarokkoScraper(Scraper):
         """Scrape a given page, returning all articles on it"""
         url = self.URLS.threadpage.format(**locals())
         doc = self.session.get_html(url)
+        thread_name = doc.cssselect("span.threadtitle")[0].text_content().strip()
         for li in [l for l in doc.cssselect("li")
                    if l.get('id') and l.get('id').startswith("post_")]:
-            yield self.get_post(url, thread_id, li)
+            yield self.get_post(url, thread_id, thread_name, li)
 
 
 
