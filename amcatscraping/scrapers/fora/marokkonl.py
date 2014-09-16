@@ -23,9 +23,12 @@ from urlparse import urljoin
 from datetime import datetime, time, timedelta
 from hashlib import md5
 import re
-
+import os.path
+import cPickle as pickle
 from amcatscraping.scraping.scraper import Scraper
 from amcatscraping.tools import  setup_logging
+import logging
+log = logging.getLogger(__name__)
 
 class MarokkoScraper(Scraper):
     medium_name = "marokko.nl"
@@ -50,8 +53,48 @@ class MarokkoScraper(Scraper):
         if "foutieve gebruikersnaam of wachtwoord" in response.text:
             raise ValueError("login fail")
 
+    def _get_arg_list(self):
+        return super(MarokkoScraper, self)._get_arg_list() + [
+            ('progress_file', {'type' : str}),
+        ]
+
     def _scrape(self):
-        return self.scrape_thread_page(4327526, 1)
+        #return self.scrape_thread_page(4327526, 1)
+        progress = self.options['progress_file']
+        if os.path.exists(progress):
+            with open(progress) as f:
+                todo = pickle.load(f)
+            log.warn("Loaded todo from {progress}: {todo}".format(**locals()))
+        else:
+            log.info("Getting list of scraped threads from elastic")
+            scraped_posts = self.get_scraped_posts_per_thread()
+            log.info("Getting list of threads from forum")
+            threads = list(self.get_all_threads())
+            todo = {thread : scraped_posts.get(thread) for thread in threads}
+            log.warn("Writing todo to {progress}: {n}".format(n=len(todo), **locals()))
+            with open(progress, 'w') as f:
+                pickle.dump(todo, f)
+        while todo:
+            thread_id, max_scraped = todo.popitem()
+            for post in self.scrape_thread(thread_id, max_scraped):
+                yield post
+            with open(progress, 'w') as f:
+                pickle.dump(todo, f)
+
+
+
+    def scrape_thread(self, thread_id, max_scraped_post):
+        for i in range(self.get_npages_thread(thread_id), 0, -1):
+            print("!!!", i)
+            found_new = False
+            for p in self.scrape_thread_page(thread_id, i):
+                if p['pagenr'] > max_scraped_post:
+                    found_new = True
+                    print(">>", i, p['pagenr'])
+                    yield p
+            if not found_new:
+                break
+
 
 
     def get_all_threads(self):
@@ -89,21 +132,28 @@ class MarokkoScraper(Scraper):
         pdoc = self.session.get_html(self.URLS.threadlist.format(**locals()))
         for li in pdoc.cssselect("li.threadbit:not(.deleted)"):
             href = li.cssselect("a.title")[0].get('href')
-            m = re.match("http://forums.marokko.nl/showthread.php?t=\d+", href)
+            m = re.match(r"showthread.php\?t=(\d+)", href)
             if not m:
-                raise ValueError("Cannot parse {href}".format(**locals()))
+                raise ValueError("Cannot parse {href!r}".format(**locals()))
             yield int(m.group(1))
 
 
     def get_npages_thread(self, thread_id):
         """Return the number of pages in this thread"""
         url = self.URLS.thread.format(**locals())
+
         doc = self.session.get_html(url)
         span = doc.cssselect("span > a.popupctrl")
         if span:
             return int(span[0].text_content().split()[-1])
         else:
             return 1
+
+
+    def get_scraped_posts_per_thread(self):
+        """Get the max(post) per thread that has already been scraped"""
+        return {int(row['section']): row['max']
+                for row in self.api.aggregate(sets=self.options['articleset'], axis1="section", stats="page")}
 
 
     def get_post(self, base_url, thread_id, thread_name, li):
@@ -119,7 +169,7 @@ class MarokkoScraper(Scraper):
             'date' : _parse_date(li.cssselect("span.date")[0].text_content()).isoformat(),
             'author' : li.cssselect("a.username")[0].text_content().strip(),
             'text' : li.cssselect("blockquote.postcontent")[0].text_content().strip(),
-            'page' : postno,
+            'pagenr' : postno,
             'children' : [],
             'medium' : self.medium_name,
             'project' : self.options['project'],
