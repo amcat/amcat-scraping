@@ -31,6 +31,8 @@ class Scraper(object):
     def __init__(self, **kwargs):
         self.options = kwargs or self._get_arguments()
         self.session = Session() #http session
+        self.api = AmcatAPI(self.options['api_host'], self.options['api_user'],
+                            self.options['api_password'])
 
     def _get_arguments(self):
         arglist = self._get_arg_list()
@@ -62,11 +64,7 @@ class Scraper(object):
             log.info("\tscraper returned {n} articles".format(**locals()))
         else:
             log.info("\tSaving.")
-            saved = self._save(
-                articles,
-                self.options['api_host'],
-                self.options['api_user'],
-                self.options['api_password'])
+            saved = self._save(articles)
         return saved
 
     def run_async(self):
@@ -86,9 +84,8 @@ class Scraper(object):
                 out.append(a)
         return out
 
-    def _save(self, articles, *auth):
-        api = AmcatAPI(*auth)
-        response = api.create_articles(
+    def _save(self, articles):
+        response = self.api.create_articles(
             self.options['project'],
             self.options['articleset'],
             json_data = articles)
