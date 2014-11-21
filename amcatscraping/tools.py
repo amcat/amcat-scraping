@@ -21,11 +21,13 @@ def parse_form(form):
     return {inp.get('name') : inp.get('value', '').encode('utf-8') for inp in form.cssselect('input')}
 
 def setup_logging():
+    formatter = logging.Formatter('[%(asctime)s %(name)s %(levelname)s] %(message)s')
     loggers = [logging.getLogger("amcatscraping"),logging.getLogger("__main__")]
     handlers = [logging.StreamHandler(sys.stdout)]
-    
+
     for handler in handlers:
         handler.setLevel(logging.INFO)
+        handler.setFormatter(formatter)
 
     for logger in loggers:
         logger.propagate = False
@@ -74,7 +76,7 @@ def get_arguments(__first__=None, **variations):
 from importlib import import_module
 def run_scraper_and_log(classpath, arguments, db):
     """
-    Shortcut to getting a scraper class, running it, and 
+    Shortcut to getting a scraper class, running it, and
     logging the results to the db
     """
     # Get the scraper class
@@ -197,7 +199,7 @@ def read_date(string, lax=False, rejectPre1970=False, american=False):
             if m:
                 datestr, timestr, pm, year = m.groups()
                 if year:
-                    # HACK: allow (twitter) to specify year AFTER the timezone indicator (???) 
+                    # HACK: allow (twitter) to specify year AFTER the timezone indicator (???)
                     datestr += year
                 try: time = tuple(map(int, timestr.split(":")))
                 except ValueError: time = []
@@ -251,5 +253,3 @@ def read_date(string, lax=False, rejectPre1970=False, american=False):
         #warn("Exception on reading datetime %s:\n%s\n%s" % (string, e, trace))
         if lax: return None
         else: raise
-
-

@@ -25,14 +25,15 @@ from hashlib import md5
 import re
 import os.path
 import cPickle as pickle
-from amcatscraping.scraping.scraper import Scraper
+from amcatscraping.scraping.scraper import Scraper, LoginMixin
 from amcatscraping.tools import  setup_logging
 import logging
 log = logging.getLogger(__name__)
 
-class MarokkoScraper(Scraper):
+class MarokkoScraper(LoginMixin, Scraper):
     medium_name = "marokko.nl"
     skip_fora = [26,22,43,54,19,11,12,9,13,44,51,36]
+    use_fora = [25, 14, 45, 39, 40]
     class URLS:
         forums = "http://forums.marokko.nl/"
         forum = "http://forums.marokko.nl/forumdisplay.php?f={forum_id}"
@@ -51,7 +52,8 @@ class MarokkoScraper(Scraper):
             }
         response = self.session.post(self.URLS.login, data=post)
         if "foutieve gebruikersnaam of wachtwoord" in response.text:
-            raise ValueError("login fail")
+            return False
+        return True
 
     def _get_arg_list(self):
         return super(MarokkoScraper, self)._get_arg_list() + [
@@ -59,53 +61,82 @@ class MarokkoScraper(Scraper):
         ]
 
     def _scrape(self):
+        self._do_login()
         #return self.scrape_thread_page(4327526, 1)
         progress = self.options['progress_file']
         if os.path.exists(progress):
             with open(progress) as f:
                 todo = pickle.load(f)
-            log.warn("Loaded todo from {progress}: {todo}".format(**locals()))
+            log.warn("Loaded todo from {progress}: {n}".format(n=len(todo), **locals()))
         else:
             log.info("Getting list of scraped threads from elastic")
             scraped_posts = self.get_scraped_posts_per_thread()
-            log.info("Getting list of threads from forum")
-            threads = list(self.get_all_threads())
-            todo = {thread : scraped_posts.get(thread) for thread in threads}
-            log.warn("Writing todo to {progress}: {n}".format(n=len(todo), **locals()))
+            log.info("Getting list of threads from forums")
+            todo = {}
+            for forum_id in self.use_fora:#self.get_forums():
+                fn = "/tmp/progress_{forum_id}.pickle".format(**locals())
+                if os.path.exists(fn):
+                    with open(fn) as f:
+                        threads = pickle.load(f)
+                else:
+                    log.info("Getting list of threads from forum {forum_id}, |todo|={n}"
+                             .format(n=len(todo), **locals()))
+                    threads = list(self.get_all_threads(forum_id))
+
+                    with open(fn, "w") as f:
+                        pickle.dump(threads, f)
+                        log.info("Wrote {n} thread ids to {fn}".format(n=len(threads), **locals()))
+
+                for thread_id in threads:
+                    todo[thread_id] = scraped_posts.get(thread_id)
+            log.warn("Writing todo to {progress}: |todo|={n}".format(n=len(todo), **locals()))
             with open(progress, 'w') as f:
                 pickle.dump(todo, f)
+
         while todo:
-            thread_id, max_scraped = todo.popitem()
-            for post in self.scrape_thread(thread_id, max_scraped):
-                yield post
+            thread_id = max(todo)
+            max_scraped = todo.pop(thread_id)
+            log.warn("Scraping thread {thread_id} (max={max_scraped})".format(**locals()))
+            try:
+                posts = list(self.scrape_thread(thread_id, max_scraped))
+                posts = self.set_parent(posts)
+                yield posts
+            except:
+                log.exception("ERROR scraping thread {thread_id}".format(**locals()))
+
             with open(progress, 'w') as f:
                 pickle.dump(todo, f)
 
-
+    def set_parent(self, posts):
+        for post in posts:
+            if post['pagenr'] == 1:
+                post['children'] = [p for p in posts if p['pagenr'] > 1]
+                return post
+        raise NotImplementedError()
 
     def scrape_thread(self, thread_id, max_scraped_post):
         for i in range(self.get_npages_thread(thread_id), 0, -1):
-            print("!!!", i)
             found_new = False
             for p in self.scrape_thread_page(thread_id, i):
                 if p['pagenr'] > max_scraped_post:
                     found_new = True
-                    print(">>", i, p['pagenr'])
                     yield p
             if not found_new:
                 break
 
 
 
-    def get_all_threads(self):
-        """Return a list of all valid thread ids, iterating over all forums"""
-        for forum_id in self.get_forums():
-            npages = self.get_npages_forum(forum_id)
-            if npages is not None:
-                for page in xrange(1, npages):
-                    print("Forum {forum_id}, page {page}/{npages}".format(**locals()))
-                    for t in self.get_threads(forum_id, page):
-                        yield t
+    def get_all_threads(self, forum_id):
+        """Return a list of all valid thread ids from a specific forum"""
+        i = 0
+        npages = self.get_npages_forum(forum_id)
+        if npages is not None:
+            for page in xrange(1, npages+1):
+                if not page % 100:
+                    log.info("Forum {forum_id}, page {page}/{npages}, i={i}".format(**locals()))
+                for t in self.get_threads(forum_id, page):
+                    i += 1
+                    yield t
 
 
     def get_forums(self):
@@ -129,8 +160,11 @@ class MarokkoScraper(Scraper):
 
     def get_threads(self, forum_id, page):
         """Return a list of threads in this forum+page"""
-        pdoc = self.session.get_html(self.URLS.threadlist.format(**locals()))
-        for li in pdoc.cssselect("li.threadbit:not(.deleted)"):
+        url = self.URLS.threadlist.format(**locals())
+        pdoc = self.session.get_html(url)
+        lis = pdoc.cssselect("li.threadbit:not(.deleted)")
+        #log.info("forum {forum_id}.{page}: {n} ({url})".format(n=len(lis), **locals()))
+        for li in lis:
             href = li.cssselect("a.title")[0].get('href')
             m = re.match(r"showthread.php\?t=(\d+)", href)
             if not m:
@@ -141,10 +175,9 @@ class MarokkoScraper(Scraper):
     def get_npages_thread(self, thread_id):
         """Return the number of pages in this thread"""
         url = self.URLS.thread.format(**locals())
-
         doc = self.session.get_html(url)
         span = doc.cssselect("span > a.popupctrl")
-        if span:
+        if span and span[0].text_content().split():
             return int(span[0].text_content().split()[-1])
         else:
             return 1
@@ -164,7 +197,7 @@ class MarokkoScraper(Scraper):
             headline = "{thread_name} [reply #{postno}]".format(**locals())
         else:
             headline = thread_name
-        return {
+        post = {
             'headline': headline,
             'date' : _parse_date(li.cssselect("span.date")[0].text_content()).isoformat(),
             'author' : li.cssselect("a.username")[0].text_content().strip(),
@@ -176,7 +209,9 @@ class MarokkoScraper(Scraper):
             'section' : thread_id,
             'url' : url,
             }
-
+        for f in ('text', 'headline'):
+            if not post[f]: post[f] = "(missing)"
+        return post
 
     def scrape_thread_page(self, thread_id, page):
         """Scrape a given page, returning all articles on it"""

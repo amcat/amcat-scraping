@@ -33,6 +33,15 @@ class Scraper(object):
         self.session = Session() #http session
         self.api = AmcatAPI(self.options['api_host'], self.options['api_user'],
                             self.options['api_password'])
+        self.scriptname = getpath(self.__class__) + "." + self.__class__.__name__
+        try:
+            int(self.options['articleset'])
+        except ValueError:
+            self.options['articleset'] = self.api.create_set(self.options['project'],
+                                                             {'name': self.options['articleset'],
+                                                              'provenance': "Scraped using {scriptname}"
+                                                              .format(scriptname=self.scriptname)})['id']
+            log.warn("Created articleset {set}".format(set=self.options['articleset']))
 
     def _get_arguments(self):
         arglist = self._get_arg_list()
@@ -41,7 +50,7 @@ class Scraper(object):
     def _get_arg_list(self):
         args = [
             ('project',{'type' : int}),
-            ('articleset',{'type' : int}),
+            ('articleset',{'type' : str}),
             (('api_host','api_user','api_password'), {}),
             ('--print_errors',{'action' : 'store_const', 'const' : True})
         ]
@@ -49,21 +58,22 @@ class Scraper(object):
 
     def run(self, input = None):
         log.info("\tScraping articles...")
-        articles = []
         sys.stdout.write('\t')
         for a in self._scrape():
-            articles.append(a)
-            sys.stdout.write('.')
-            sys.stdout.flush()
-        print
+            self.save(a)
+
+    def save(self, articles):
+        if isinstance(articles, dict): 
+            articles = [articles]
+        else:
+            articles = list(articles)
 
         log.info("\tFound {} articles. postprocessing...".format(len(articles)))
         articles = self._postprocess(articles)
         if 'command' in self.options and self.options['command'] == 'test':
-            n = len(articles)
-            log.info("\tscraper returned {n} articles".format(**locals()))
+            log.info("\tscraper returned {n} articles".format(n=len(articles), **locals()))
         else:
-            log.info("\tSaving.")
+            log.info("\tSaving {n} articles.".format(n=len(articles), **locals()))
             saved = self._save(articles)
         return saved
 
@@ -80,7 +90,7 @@ class Scraper(object):
         out = []
         for a in articles:
             if a:
-                a['insertscript'] = getpath(self.__class__) + "." + self.__class__.__name__
+                a['insertscript'] = self.scriptname
                 out.append(a)
         return out
 
@@ -158,11 +168,15 @@ class LoginMixin(object):
         args.append((('username','password'), {}))
         return args
 
-    def _scrape(self, *args, **kwargs):
+    def _do_login(self):
         username = self.options['username']
         password = self.options['password']
         # Please ensure _login returns True on success
-        assert self._login(username, password)
+        if not self._login(username, password):
+            raise ValueError("Invalid username or password")
+
+    def _scrape(self, *args, **kwargs):
+        self._do_login()
         return super(LoginMixin, self)._scrape(*args, **kwargs)
 
     def _login(self, username, password):
