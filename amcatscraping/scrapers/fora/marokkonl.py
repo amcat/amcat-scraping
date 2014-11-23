@@ -63,6 +63,7 @@ class MarokkoScraper(LoginMixin, Scraper):
     def _scrape(self):
         self._do_login()
         #return self.scrape_thread_page(4327526, 1)
+        #list(self.scrape_thread_page(5152908, 1))
         progress = self.options['progress_file']
         if os.path.exists(progress):
             with open(progress) as f:
@@ -99,20 +100,32 @@ class MarokkoScraper(LoginMixin, Scraper):
             log.warn("Scraping thread {thread_id} (max={max_scraped})".format(**locals()))
             try:
                 posts = list(self.scrape_thread(thread_id, max_scraped))
-                posts = self.set_parent(posts)
-                yield posts
+                if posts:
+                    posts = self.set_parent(posts, thread_id)
+                    yield posts
             except:
                 log.exception("ERROR scraping thread {thread_id}".format(**locals()))
 
             with open(progress, 'w') as f:
                 pickle.dump(todo, f)
 
-    def set_parent(self, posts):
+    def set_parent(self, posts, thread_id):
+        # if post 1 (pagenr==1) is part of posts, add other posts as child
         for post in posts:
             if post['pagenr'] == 1:
                 post['children'] = [p for p in posts if p['pagenr'] > 1]
                 return post
-        raise NotImplementedError()
+        # look up first post in this thread on amcat and use that as parent
+        r = list(self.api.search(self.articleset, query=None, section=thread_id, page=1, minimal=True))
+        if not r:
+            raise Exception("Post 1 not in AmCAT but also not scraped?")
+        parent_id = r[0]['id']
+        result = []
+        for post in posts:
+            post['parent'] = parent_id
+            result.append( post)
+        return result
+
 
     def scrape_thread(self, thread_id, max_scraped_post):
         for i in range(self.get_npages_thread(thread_id), 0, -1):
@@ -121,6 +134,7 @@ class MarokkoScraper(LoginMixin, Scraper):
                 if p['pagenr'] > max_scraped_post:
                     found_new = True
                     yield p
+                    # [wva] can't we just 'return' if a non-new post is found??
             if not found_new:
                 break
 
@@ -152,14 +166,14 @@ class MarokkoScraper(LoginMixin, Scraper):
     def get_npages_forum(self,forum_id):
         """Return the number of pages in this forum"""
         url = self.URLS.forum.format(**locals())
-        html = self.session.get_html(self.URLS.forum.format(**locals()))
+        html = self.session.get_html(url)
         lijst = html.cssselect("span > a.popupctrl")
         if lijst:
             return int(lijst[0].text_content().split()[-1])
 
 
     def get_threads(self, forum_id, page):
-        """Return a list of threads in this forum+page"""
+        """Return a sequence of threads in this forum+page"""
         url = self.URLS.threadlist.format(**locals())
         pdoc = self.session.get_html(url)
         lis = pdoc.cssselect("li.threadbit:not(.deleted)")
@@ -185,9 +199,8 @@ class MarokkoScraper(LoginMixin, Scraper):
 
     def get_scraped_posts_per_thread(self):
         """Get the max(post) per thread that has already been scraped"""
-        return {int(row['section']): row['max']
+        return {int(row['section']): row['max'] 
                 for row in self.api.aggregate(sets=self.options['articleset'], axis1="section", stats="page")}
-
 
     def get_post(self, base_url, thread_id, thread_name, li):
         """Create an 'amcat' article dict from a li element"""
@@ -218,7 +231,7 @@ class MarokkoScraper(LoginMixin, Scraper):
         url = self.URLS.threadpage.format(**locals())
         doc = self.session.get_html(url)
         thread_name = doc.cssselect("span.threadtitle")[0].text_content().strip()
-        for li in [l for l in doc.cssselect("li")
+        for li in [l for l in doc.cssselect("li:not(.postbitdeleted)")
                    if l.get('id') and l.get('id').startswith("post_")]:
             yield self.get_post(url, thread_id, thread_name, li)
 

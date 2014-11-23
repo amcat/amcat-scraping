@@ -95,10 +95,7 @@ class Scraper(object):
         return out
 
     def _save(self, articles):
-        response = self.api.create_articles(
-            self.options['project'],
-            self.options['articleset'],
-            json_data = articles)
+        response = self.api.create_articles(self.options['project'], self.articleset, json_data = articles)
         ids = [article['id'] for article in response]
         if not any(ids) and ids:
             raise RuntimeError("None of the articles were saved.")
@@ -108,6 +105,9 @@ class Scraper(object):
                 len(ids)))
         return filter(lambda ar: ar['id'], response)
 
+    @property
+    def articleset(self):
+        return self.options['articleset']
 
 class UnitScraper(Scraper):
     """
