@@ -1,16 +1,31 @@
+from amcatscraping.tools import setup_logging, parse_form
 from amcatscraping.scraping.scraper import (LoginMixin, PropertyCheckMixin,
                                             UnitScraper, DateRangeScraper)
 from datetime import date
 from urlparse import urljoin
 
+import lxml.html
+
+OVERVIEW_URL = "https://login.nrc.nl/overview"
+
 class NRCScraper(LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper):
     nrc_version = "NN"
 
+    def __init__(self, *args, **kwargs):
+        super(NRCScraper, self).__init__(*args, **kwargs)
+
     def _login(self, username, password):
-        post = {'username' : username, 'password' : password}
-        response = self.session.post("https://login.nrc.nl/login", post)
-        if response.url.endswith("/overzicht"):
+        login_page = self.session.get(OVERVIEW_URL)
+        login_doc = lxml.html.fromstring(login_page.content)
+        login_url = login_page.url
+
+        post = parse_form(login_doc.cssselect("#fm1")[0])
+        post.update({"username": username, "password": password})
+
+        response = self.session.post(login_url, post)
+        if response.url.endswith("/overview"):
             return True
+        return False
 
     def _get_units(self):
         for date in self.dates:
@@ -50,4 +65,8 @@ class NRCScraper(LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper):
         'defaults' : {},
         'required' : ['date','headline','section','pagenr','text'],
         'expected' : ['author']
-        }
+    }
+
+if __name__ == '__main__':
+    setup_logging()
+    NRCScraper().run()
