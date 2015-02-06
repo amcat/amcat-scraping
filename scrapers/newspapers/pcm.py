@@ -114,9 +114,9 @@ class PCMScraper(LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper):
             paper = self._get_paper(pid, date)
             for index in paper:
                 for art in index['doc']['articles']:
-                    if not art['title'] and art['title'].strip():
+                    if not (art['title'] and art['title'].strip()):
                         continue
-                    yield (index,art)
+                    yield (index, art)
 
     def _scrape_unit(self, (index,art)):
         article = {'metastring':{}}
