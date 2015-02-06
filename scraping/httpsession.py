@@ -1,7 +1,6 @@
 """Class to deal with http browsing"""
 
 from lxml import html
-from httplib2 import iri2uri
 from urlparse import urljoin
 import requests
 

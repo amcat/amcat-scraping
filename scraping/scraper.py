@@ -1,5 +1,4 @@
-from datetime import timedelta, date, datetime
-import logging; log = logging.getLogger(__name__)
+from datetime import timedelta
 from collections import OrderedDict
 
 
@@ -10,6 +9,9 @@ from amcatscraping.tools import todatetime, todate, get_arguments, read_date
 from amcatclient.amcatclient import AmcatAPI
 
 import __main__, os, sys
+
+import logging; log = logging.getLogger(__name__)
+
 def getpath(cls):
     """Get class path even if it's __main__"""
     if cls.__module__ == "__main__":
