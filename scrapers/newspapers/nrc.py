@@ -23,9 +23,7 @@ class NRCScraper(LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper):
         post.update({"username": username, "password": password})
 
         response = self.session.post(login_url, post)
-        if response.url.endswith("/overview"):
-            return True
-        return False
+        return response.url.endswith("/overview")
 
     def _get_units(self):
         for date in self.dates:
