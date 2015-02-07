@@ -1,23 +1,21 @@
 """Class to deal with http browsing"""
 
-from lxml import html
-from urlparse import urljoin
+import lxml.html
 import requests
 
-import logging; log = logging.getLogger(__name__)
 
 class Session(requests.Session):
     """Provides a HTTP session, HTML parsing and a few convenience methods"""
-    def get_html(self, link, *args, **kwargs):
-        """Open url or follow <a> tag and parse into lxml.HTML object"""
-        response = self.get(link, *args, **kwargs)
-        doc = html.fromstring(response.text.encode('utf-8'), base_url = response.url)
-        return doc
+    def __init__(self):
+        super(Session, self).__init__()
+        self.headers.update({
+            "User-Agent": "Mozilla/5.0 (Windows NT 6.3; rv:36.0) Gecko/20100101 Firefox/36.0"
+        })
 
-    def get(self, link, *args, **kwargs):
-        #link: an url or an <a> tag
-        if not type(link) in (unicode, str):            
-            link = urljoin(link.base_url, link.get('href'))
-        return super(Session, self).get(link.strip(), *args, **kwargs)
+    def get_html(self, link, **kwargs):
+        return lxml.html.fromstring(self.get(link, **kwargs).content)
+
+    def get(self, link, **kwargs):
+        return super(Session, self).get(link.strip(), **kwargs)
 
 

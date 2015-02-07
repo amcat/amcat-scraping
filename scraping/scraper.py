@@ -13,7 +13,9 @@ import __main__, os, sys
 import logging; log = logging.getLogger(__name__)
 
 def getpath(cls):
-    """Get class path even if it's __main__"""
+    """Get class path even if it's __main__
+
+    TODO: Fix.. it relies on PYTHONPATH, seriously? :-/"""
     if cls.__module__ == "__main__":
         pythonpath = os.environ.get('PYTHONPATH','')
         filepath = sys.path[0].split(pythonpath,1)[1].strip("/")
