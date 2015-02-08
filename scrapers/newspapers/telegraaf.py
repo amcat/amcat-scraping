@@ -1,26 +1,41 @@
+import re
+import collections
+from datetime import date
+import itertools
+
 from amcatscraping.scraping.scraper import UnitScraper, DateRangeScraper, LoginMixin, PropertyCheckMixin
 from amcatscraping.tools import parse_form, setup_logging
-import re
 
-from datetime import date
+
+Article = collections.namedtuple("Article", ["article_id", "pagenr", "section", "date"])
+
+ARTICLE_URL = "http://www.telegraaf.nl/telegraaf-i/article/{article_id}"
+LOGIN_URL = "http://www.telegraaf.nl/wuz/loginbox/epaper?nocache"
+WEEK_URL = "http://www.telegraaf.nl/telegraaf-i/week"
+
+
 def mkdate(string):
-    return date(*map(int,string.split("-")))
+    return date(*map(int, string.split("-")))
+
 
 
 class TelegraafScraper(LoginMixin,PropertyCheckMixin,UnitScraper,DateRangeScraper):
     def _login(self, username, password):
-        login_url = "http://www.telegraaf.nl/wuz/loginbox/epaper?nocache"
-        week_url = "http://www.telegraaf.nl/telegraaf-i/week"        
-        self.session.get(week_url) # set session cookies
+        self.session.get(WEEK_URL)
 
-        form = parse_form(self.session.get_html(login_url).cssselect("#user-login")[0])
-        form['name'], form['pass'] = username, password
-        form['rhash'], form['redir'] = "f8ac71adde5cdb382ab5e485a8c3447210a6b69b", week_url
+        form = parse_form(self.session.get_html(LOGIN_URL).cssselect("#user-login")[0])
+        form.update({
+            "name": username, "password": password,
+            "rhash": "f8ac71adde5cdb382ab5e485a8c3447210a6b69b",
+            "redir": WEEK_URL
+        })
 
-        self.session.headers.update({"Host":"www.telegraaf.nl","Referer":login_url})
-        response = self.session.post(login_url, form)
-        if "close-iframe" in response.url:
-            return True
+        self.session.headers.update({
+            "Host": "www.telegraaf.nl",
+            "Referer": LOGIN_URL
+        })
+
+        return "close-iframe" in self.session.post(LOGIN_URL, form).url
 
     def _get_units(self):
         data = self.session.get("http://www.telegraaf.nl/telegraaf-i/newspapers").json()
@@ -29,30 +44,44 @@ class TelegraafScraper(LoginMixin,PropertyCheckMixin,UnitScraper,DateRangeScrape
             for page in paper['pages']:
                 for article_id in page['articles']:
                     section = [s['title'] for s in paper['sections'] if page['page_number'] in s['pages']][0]
-                    yield (article_id, page['page_number'],section,mkdate(paper['date']))
+                    yield Article(article_id, page['page_number'], section, mkdate(paper['date']))
 
-    def _scrape_unit(self, (article_id, pagenr, section, date)):
+    def _scrape_unit(self, article):
+        article_id, pagenr, section, date = article
+
         if section == "Advertentie":
-            return
-        url = "http://www.telegraaf.nl/telegraaf-i/article/" + article_id
-        article = {'url' : url,'metastring' : {},'pagenr' : pagenr,
-                   'section' : section, 'date' : date}
-        data = self.session.get(url).json()
-        article['headline'] = data['headline']
-        if not article['headline']:
-            return
+            return None
 
-        body = {k : "" for dic in data['body'] for k in dic}
+        url = ARTICLE_URL.format(article_id=article_id)
+        data = collections.defaultdict(str, **self.session.get(url).json())
+
+        article = {
+            'url': url, 'metastring': {}, 'pagenr': pagenr,
+            'section': section, 'date': date,
+            "headline": data.get("headline")
+        }
+
+        if not article['headline']:
+            return None
+
+        body = dict.fromkeys(itertools.chain.from_iterable(data["body"]), "")
+
         for dic in data['body']:
             for k, v in dic.items():
-                if not body[k]: body[k] = v
-                else: body[k] += "\n\n" + v
-            
-        article['text'] = body.get('lead') or "" + (body.get('paragraph') or body.get('byline') or "")
+                body[k] += v + "\n\n"
+
+        lead = body.get("lead", "")
+        byline = body.get("paragraph") or body.get("byline", "")
+        article['text'] = lead + byline
+
         if not article['text']:
-            return
-        article['metastring'].update({'subheadline' : body.get('subheadline'),
-                                      'media_caption' : body.get('media-caption')})
+            return None
+
+        article['metastring'].update({
+            'subheadline': body.get('subheadline'),
+            'media_caption': body.get('media-caption')
+        })
+
         for line in article['text'].split("\n\n"):
             if line.startswith("door "):
                 article['author'] = line.lstrip("door ")
@@ -63,12 +92,12 @@ class TelegraafScraper(LoginMixin,PropertyCheckMixin,UnitScraper,DateRangeScrape
         return article
 
     _props = {
-        'defaults' : {
-            'medium' : "De Telegraaf",
+        'defaults': {
+            'medium': "De Telegraaf",
             },
-        'required' : ['url','pagenr','section','text','date','headline'],
-        'expected' : ['dateline','author']
-        }
+        'required': ['url', 'pagenr', 'section', 'text', 'date', 'headline'],
+        'expected': ['dateline', 'author']
+    }
 
 if __name__ == "__main__":
     setup_logging()
