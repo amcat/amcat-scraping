@@ -16,6 +16,9 @@
 # You should have received a copy of the GNU Lesser General Public        #
 # License along with AmCAT.  If not, see <http://www.gnu.org/licenses/>.  #
 ###########################################################################
+from __future__ import print_function
+
+from operator import itemgetter
 import os
 import sys
 import logging
@@ -23,12 +26,18 @@ from datetime import timedelta
 from collections import OrderedDict
 
 import __main__
-from amcatscraping.amcatscraping.scraping.httpsession import Session
-from amcatscraping.amcatscraping.tools import todatetime, todate, get_arguments, read_date
+from amcatscraping.scraping.httpsession import Session
+from amcatscraping.tools import todatetime, todate, get_arguments, read_date
 from amcatclient.amcatclient import AmcatAPI
 
-
 log = logging.getLogger(__name__)
+
+ARGLIST = OrderedDict((
+    ('project', {'type': int}),
+    ('articleset', {'type': int}),
+    (('api_host', 'api_user', 'api_password'), {}),
+    ('--log_errors', {'action': 'store_const', 'const': True})
+))
 
 
 def getpath(cls):
@@ -47,45 +56,34 @@ def getpath(cls):
 
 class Scraper(object):
     def __init__(self, **kwargs):
-        self.options = kwargs or self._get_arguments()
+        self.options = kwargs or get_arguments(ARGLIST)
         self.session = Session()  #http session
-
-    def _get_arguments(self):
-        arglist = self._get_arg_list()
-        return get_arguments(OrderedDict(arglist))
-
-    def _get_arg_list(self):
-        args = [
-            ('project', {'type': int}),
-            ('articleset', {'type': int}),
-            (('api_host', 'api_user', 'api_password'), {}),
-            ('--print_errors', {'action': 'store_const', 'const': True})
-        ]
-        return args
+        self.project_id = self.options["project"]
+        self.articleset_id = self.options["articleset"]
 
     def run(self, input=None):
-        log.info("\tScraping articles...")
+        log.info("Scraping articles...")
         articles = []
-        sys.stdout.write('\t')
         for a in self._scrape():
             articles.append(a)
-            sys.stdout.write('.')
+            print(".", end="")
             sys.stdout.flush()
-        print
+        print("")
 
-        log.info("\tFound {} articles. postprocessing...".format(len(articles)))
-        articles = self._postprocess(articles)
-        if 'command' in self.options and self.options['command'] == 'test':
-            n = len(articles)
-            log.info("\tscraper returned {n} articles".format(**locals()))
-        else:
-            log.info("\tSaving.")
-            saved = self._save(
-                articles,
-                self.options['api_host'],
-                self.options['api_user'],
-                self.options['api_password'])
-        return saved
+        log.info("Found {} articles. Postprocessing...".format(len(articles)))
+        articles = list(self._postprocess(articles))
+
+        if self.options.get("command") == "test":
+            log.info("Scraper returned %s articles", len(articles))
+            return articles
+
+        log.info("Saving..")
+        return self._save(
+            articles,
+            self.options['api_host'],
+            self.options['api_user'],
+            self.options['api_password']
+        )
 
     def _scrape(self):
         """Scrape the target resource and return a sequence of article dicts"""
@@ -93,27 +91,21 @@ class Scraper(object):
 
     def _postprocess(self, articles):
         """Space to do something with the unsaved articles that the scraper provided"""
-        out = []
         for a in articles:
             if a:
                 a['insertscript'] = getpath(self.__class__) + "." + self.__class__.__name__
-                out.append(a)
-        return out
+                yield a
 
     def _save(self, articles, *auth):
         api = AmcatAPI(*auth)
-        response = api.create_articles(
-            self.options['project'],
-            self.options['articleset'],
-            json_data=articles)
+        response = api.create_articles(self.project_id, self.articleset_id, json_data=articles)
         ids = [article['id'] for article in response]
         if not any(ids) and ids:
             raise RuntimeError("None of the articles were saved.")
         if not all(ids):
-            log.warning("\tWarning: Only {}/{} articles were saved.".format(
-                len(filter(None, ids)),
-                len(ids)))
-        return filter(lambda ar: ar['id'], response)
+            warning_msg = "Warning: Only {}/{} articles were saved."
+            log.warning(warning_msg.format(len(filter(None, ids)), len(ids)))
+        return filter(itemgetter("id"), response)
 
 
 class UnitScraper(Scraper):
@@ -127,7 +119,7 @@ class UnitScraper(Scraper):
             try:
                 yield self._scrape_unit(unit)
             except Exception as e:
-                if self.options['print_errors']:
+                if self.options['log_errors']:
                     log.exception(e)
                 else:
                     sys.stdout.write('x')
@@ -158,7 +150,7 @@ class DateRangeScraper(Scraper):
         self.maxdatetime = self.options['max_datetime']
 
     def _postprocess(self, articles):
-        articles = super(DateRangeScraper, self)._postprocess(articles)
+        articles = list(super(DateRangeScraper, self)._postprocess(articles))
         for a in articles:
             _date = todatetime(a['date'])
             assert self.mindatetime <= _date <= self.maxdatetime
@@ -215,7 +207,7 @@ class PropertyCheckMixin(object):
         return articles
 
     def _add_defaults(self, articles):
-        log.info("\t\tFilling in defaults...")
+        log.info("Filling in defaults...")
         self._props['defaults']['project'] = self.options['project']
         self._props['defaults']['metastring'] = {}
         for prop, default in self._props['defaults'].items():
@@ -225,7 +217,7 @@ class PropertyCheckMixin(object):
         return articles
 
     def _check_properties(self, articles):
-        log.info("\t\tChecking properties...")
+        log.info("Checking properties...")
         for prop in self._props['required']:
             if not all(
                     [article.get(prop) or article['metastring'].get(prop) for article in articles]):
