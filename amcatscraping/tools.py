@@ -30,6 +30,16 @@ from lxml import html, etree
 log = logging.getLogger(__name__)
 
 ### MISC ###
+def setup_django():
+    import django
+
+    try:
+        django.setup()
+    except django.core.exceptions.ImproperlyConfigured:
+        django.conf.settings.configure()
+        django.setup()
+
+
 def html2text(data):
     if type(data) == list:
         return "".join([html2text(bit) for bit in data])
