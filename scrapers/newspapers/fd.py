@@ -77,7 +77,6 @@ class FDScraper(LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper):
             _, url, _ = area.get('onclick').split("'")
             yield "%s_body.html" % urljoin(entry.url, url).rstrip(".html")
 
-
     def _get_units(self):
         for date in self.dates:
             for entry in self._get_sections(date):

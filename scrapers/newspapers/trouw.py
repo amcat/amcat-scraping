@@ -21,8 +21,9 @@ from __future__ import unicode_literals, print_function
 
 import pcm
 
+
 class TrouwScraper(pcm.PCMScraper):
-    def __init__(self,*args,**kwargs):
+    def __init__(self, *args, **kwargs):
         super(TrouwScraper, self).__init__(*args, **kwargs)
         self._props['defaults']['medium'] = "Trouw"
         self._props['defaults']['insertscript'] = 'TrouwScraper'

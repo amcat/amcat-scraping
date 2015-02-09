@@ -18,8 +18,9 @@
 ###########################################################################
 from amcatscraping.scrapers.newspapers import pcm
 
+
 class AlgemeenDagbladScraper(pcm.PCMScraper):
-    def __init__(self,*args,**kwargs):
+    def __init__(self, *args, **kwargs):
         super(AlgemeenDagbladScraper, self).__init__(*args, **kwargs)
         self._props['defaults']['medium'] = 'Algemeen Dagblad'
         self._props['defaults']['insertscript'] = 'AlgemeenDagbladScraper'

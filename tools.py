@@ -1,8 +1,8 @@
 ###########################################################################
-#          (C) Vrije Universiteit, Amsterdam (the Netherlands)            #
-#                                                                         #
+# (C) Vrije Universiteit, Amsterdam (the Netherlands)            #
+# #
 # This file is part of AmCAT - The Amsterdam Content Analysis Toolkit     #
-#                                                                         #
+# #
 # AmCAT is free software: you can redistribute it and/or modify it under  #
 # the terms of the GNU Lesser General Public License as published by the  #
 # Free Software Foundation, either version 3 of the License, or (at your  #
@@ -17,17 +17,19 @@
 # License along with AmCAT.  If not, see <http://www.gnu.org/licenses/>.  #
 ###########################################################################
 
-from html2text import html2text as html_to_text
-from lxml import html, etree
-from urlparse import urljoin
-import logging, sys, re
-from datetime import datetime, date
+import logging
+import sys
+import re
 import time
 import argparse
-import logging; log = logging.getLogger(__name__)
+from datetime import datetime, date
+
+from html2text import html2text as html_to_text
+from lxml import html, etree
+
+log = logging.getLogger(__name__)
 
 ### MISC ###
-
 def html2text(data):
     if type(data) == list:
         return "".join([html2text(bit) for bit in data])
@@ -36,13 +38,16 @@ def html2text(data):
     elif type(data) in (html.HtmlElement, etree._Element):
         return html_to_text(html.tostring(data)).strip()
 
+
 def parse_form(form):
-    return {inp.get('name') : inp.get('value', '').encode('utf-8') for inp in form.cssselect('input')}
+    return {inp.get('name'): inp.get('value', '').encode('utf-8') for inp in
+            form.cssselect('input')}
+
 
 def setup_logging():
-    loggers = [logging.getLogger("amcatscraping"),logging.getLogger("__main__")]
+    loggers = [logging.getLogger("amcatscraping"), logging.getLogger("__main__")]
     handlers = [logging.StreamHandler(sys.stdout)]
-    
+
     for handler in handlers:
         handler.setLevel(logging.INFO)
 
@@ -51,6 +56,7 @@ def setup_logging():
         logger.setLevel(logging.INFO)
         for handler in handlers:
             logger.addHandler(handler)
+
 
 def get_arguments(__first__=None, **variations):
     """wrapper for argparse module
@@ -72,9 +78,9 @@ def get_arguments(__first__=None, **variations):
     """
     assert bool(__first__) ^ bool(variations)
 
-    def addarguments(parser,_dict):
+    def addarguments(parser, _dict):
         for args, options in _dict.items():
-            if not hasattr(args,'__iter__'):
+            if not hasattr(args, '__iter__'):
                 args = (args,)
             for arg in args:
                 parser.add_argument(arg, **options)
@@ -91,15 +97,17 @@ def get_arguments(__first__=None, **variations):
 
 
 from importlib import import_module
+
+
 def run_scraper_and_log(classpath, arguments, db):
     """
     Shortcut to getting a scraper class, running it, and 
     logging the results to the db
     """
     # Get the scraper class
-    modulename, classname = classpath.rsplit(".",1)
+    modulename, classname = classpath.rsplit(".", 1)
     module = import_module(modulename)
-    scraper = getattr(module,classname)
+    scraper = getattr(module, classname)
     # Run the scraper
     log.info("Running {}".format(classpath))
     tstart = datetime.now()
@@ -108,29 +116,35 @@ def run_scraper_and_log(classpath, arguments, db):
     except Exception as e:
         articles = []
         log.exception("running scraper failed")
-    else: e = None
+    else:
+        e = None
     tfinish = datetime.now()
 
     # Log the details to the db
     details = {
-        'time_started' : tstart,
-        'time_finished' : tfinish,
-        'arguments' : arguments,
-        'n_articles' : len(articles),
-        'exception' : e}
+        'time_started': tstart,
+        'time_finished': tfinish,
+        'arguments': arguments,
+        'n_articles': len(articles),
+        'exception': e}
     runs = db[classpath]['runs']
     runs.append(details)
-    db.update(classpath, runs = runs)
+    db.update(classpath, runs=runs)
+
 
 ### DATES ###
 
 def todate(d):
     return date.fromordinal(d.toordinal())
+
+
 def todatetime(d):
     return datetime.fromtimestamp(time.mktime(d.timetuple()))
 
+
 class _DateFormat(object):
     """Format definition for parsing dates"""
+
     def __init__(self, expr, yeargroup=3, monthgroup=2, daygroup=1,
                  monthisname=False, swapamerican=False):
         self.expr = re.compile(expr, re.UNICODE)
@@ -139,6 +153,7 @@ class _DateFormat(object):
         self.daygroup = daygroup
         self.monthisname = monthisname
         self.swapamerican = swapamerican
+
     def readDate(self, date, american=False):
         """Read the given date, producing a y,m,d tuple"""
         match = re.search(self.expr, date)
@@ -150,24 +165,27 @@ class _DateFormat(object):
             if not m: return
         y, m, d = map(int, (y, m, d))
         # 2-digit year logic:
-        if y < 40: y = 2000 + y
-        elif y < 100: y = 1900 + y
+        if y < 40:
+            y += 2000
+        elif y < 100:
+            y += 1900
         # dmy vs mdy
         if american and self.swapamerican:
             m, d = d, m
         return y, m, d
 
+
 _DATEFORMATS = (
-    _DateFormat("(\d{4})[-/\.](\d{1,2})[-/\.](\d{1,2})", 1,2,3),
-    _DateFormat("(\d{1,2})[-/\.](\d{1,2})[-/\.](\d{4})", 3,2,1,swapamerican=True),
-    _DateFormat("(\w+),?\s+(\d{1,2})\s*,?\s+(\d{4})",3,1,2,True),
-    _DateFormat("(\w+)\s+(\d{1,2})\s*,?\s+(\d{4})",  3,1,2,True),
-    _DateFormat("(\d{1,2})(?:\w\w?|\.)?\s+(\w*)\s+(\d{4})",3,2,1,True),
-    _DateFormat("\w*?,?\s*(\d{1,2})\s+(\w+)\s+(\d{4})",3,2,1,True),
-    _DateFormat("(\d{1,2})\.?\s+(\w*)\s+(\d{4})",    3,2,1,True),
-    _DateFormat("(\d{1,2})[- ](\w+)[- ](\d{2,4})",   3,2,1,True),
-    _DateFormat("(\w+) (\d{1,2}), (\d{4})",          3,1,2,True),
-    _DateFormat("(\d{1,2})[-/](\d{1,2})[-/](\d{2})", 3,2,1,swapamerican=True),
+    _DateFormat("(\d{4})[-/\.](\d{1,2})[-/\.](\d{1,2})", 1, 2, 3),
+    _DateFormat("(\d{1,2})[-/\.](\d{1,2})[-/\.](\d{4})", 3, 2, 1, swapamerican=True),
+    _DateFormat("(\w+),?\s+(\d{1,2})\s*,?\s+(\d{4})", 3, 1, 2, True),
+    _DateFormat("(\w+)\s+(\d{1,2})\s*,?\s+(\d{4})", 3, 1, 2, True),
+    _DateFormat("(\d{1,2})(?:\w\w?|\.)?\s+(\w*)\s+(\d{4})", 3, 2, 1, True),
+    _DateFormat("\w*?,?\s*(\d{1,2})\s+(\w+)\s+(\d{4})", 3, 2, 1, True),
+    _DateFormat("(\d{1,2})\.?\s+(\w*)\s+(\d{4})", 3, 2, 1, True),
+    _DateFormat("(\d{1,2})[- ](\w+)[- ](\d{2,4})", 3, 2, 1, True),
+    _DateFormat("(\w+) (\d{1,2}), (\d{4})", 3, 1, 2, True),
+    _DateFormat("(\d{1,2})[-/](\d{1,2})[-/](\d{2})", 3, 2, 1, swapamerican=True),
 )
 
 MONTHNAMES = (('jan', 'janv', 'ener', 'gennaio'),
@@ -175,7 +193,7 @@ MONTHNAMES = (('jan', 'janv', 'ener', 'gennaio'),
               ('mar', 'mrt', 'maa', 'mar', 'm\xe4rz', 'maerz'),
               ('apr', 'avri', 'abri'),
               ('may', 'mai', 'mei', 'mayo', 'maggio', 'm\xe4rz'),
-              ('jun', 'juin','giugno'),
+              ('jun', 'juin', 'giugno'),
               ('jul', 'juil', 'luglio'),
               ('aug', 'aout', 'agos', u'ao\xfbt'),
               ('sep', 'setem', 'settembre'),
@@ -190,7 +208,7 @@ def _monthnr(monthname):
     for i, names in enumerate(MONTHNAMES):
         for name in names:
             if monthname.lower().startswith(name.lower()):
-                return i+1
+                return i + 1
 
 
 def read_date(string, lax=False, rejectPre1970=False, american=False):
@@ -206,7 +224,9 @@ def read_date(string, lax=False, rejectPre1970=False, american=False):
     @param american: prefer MDY over DMY
     @return: a \C{datetime.datetime} object
     """
-    if string == None: return None
+    if string is None:
+        return None
+
     try:
         datestr = string
 
@@ -218,14 +238,20 @@ def read_date(string, lax=False, rejectPre1970=False, american=False):
                 if year:
                     # HACK: allow (twitter) to specify year AFTER the timezone indicator (???) 
                     datestr += year
-                try: time = tuple(map(int, timestr.split(":")))
-                except ValueError: time = []
-                if len(time) == 3: pass
-                elif len(time) == 2: time = time + (0,)
-                elif lax: time = None
-                else: raise ValueError("Could not parse time part "
-                                       +"('%s') of datetime string '%s'"
-                                       % (timestr, string))
+                try:
+                    time = tuple(map(int, timestr.split(":")))
+                except ValueError:
+                    time = []
+                if len(time) == 3:
+                    pass
+                elif len(time) == 2:
+                    time = time + (0,)
+                elif lax:
+                    time = None
+                else:
+                    raise ValueError("Could not parse time part "
+                                     + "('%s') of datetime string '%s'"
+                                     % (timestr, string))
                 if pm and time[0] != 12: time = (time[0] + 12, ) + time[1:]
         for df in _DATEFORMATS:
             date = df.readDate(datestr, american=american)
@@ -238,16 +264,16 @@ def read_date(string, lax=False, rejectPre1970=False, american=False):
                 if datestr.startswith(prefixes):
                     month_plus_day, year = datestr.split(',')
                     day = month_plus_day.split(' ')[1]
-                    date = int(year), i+1, int(day)
+                    date = int(year), i + 1, int(day)
 
         if not date:
             # For '22 November 2006 Wednesday 10:23 AM (Central European Time)'
             s = datestr.split(' ')
-            if len(s)>2:
+            if len(s) > 2:
                 for i, prefixes in enumerate(MONTHNAMES):
                     if s[1].startswith(prefixes):
                         try:
-                            date = int(s[2]), i+1, int(s[0])
+                            date = int(s[2]), i + 1, int(s[0])
                         except:
                             pass
                         finally:
@@ -262,13 +288,18 @@ def read_date(string, lax=False, rejectPre1970=False, american=False):
             raise ValueError("Rejecting datetime string %s -> %s"
                              % (string, date))
 
-        if not time: time = (0, 0, 0)
+        if not time:
+            time = (0, 0, 0)
         return datetime(*(date + time))
-    except Exception,e:
+    except Exception:
         import traceback
-        trace = traceback.format_exc()
-        #warn("Exception on reading datetime %s:\n%s\n%s" % (string, e, trace))
-        if lax: return None
-        else: raise
+
+        # trace = traceback.format_exc()
+        # warn("Exception on reading datetime %s:\n%s\n%s" % (string, e, trace))
+
+        if lax:
+            return None
+        else:
+            raise
 
 

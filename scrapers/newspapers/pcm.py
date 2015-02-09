@@ -21,8 +21,6 @@ from amcatscraping.scraping.scraper import LoginMixin, PropertyCheckMixin, UnitS
 from amcatscraping.tools import parse_form
 
 import datetime
-import urllib2
-import urllib
 import base64
 import uuid
 
@@ -54,14 +52,18 @@ def get_pubdate(paper):
 
 
 class PCMScraper(LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper):
+    paper_id = None
+    context_id = None
+    domain = None
+
     def __init__(self, *args, **kwargs):
         super(PCMScraper, self).__init__(*args, **kwargs)
 
         self.ticket_url = None
         self.client_id = uuid4()
         self.headers = {
-            'DSMessagingVersion' : 1,
-            'DSId' : 'nil'
+            'DSMessagingVersion':  1,
+            'DSId': 'nil'
         }
 
     def _login(self, username, password):
@@ -83,9 +85,8 @@ class PCMScraper(LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper):
         form = parse_form(login_page)
         form['username'] = username
         form['password'] = password
-        login_page = self.session.post(
-            url, data = form
-        )
+        login_page = self.session.post(url, data=form)
+
         # Resolve ticket_url and save it
         self.ticket_url = login_page.url
         

@@ -22,7 +22,7 @@ from __future__ import unicode_literals, print_function
 import pcm
 
 class VolkskrantScraper(pcm.PCMScraper):
-    def __init__(self,*args,**kwargs):
+    def __init__(self, *args, **kwargs):
         super(VolkskrantScraper, self).__init__(*args, **kwargs)
         self._props['defaults']['medium'] = "De Volkskrant"
         self._props['defaults']['insertscript'] = "VolkskrantScraper"
