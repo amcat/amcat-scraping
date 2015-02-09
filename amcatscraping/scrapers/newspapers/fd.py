@@ -21,8 +21,8 @@ from html2text import html2text
 import lxml.html
 from urlparse import urljoin
 
-from amcatscraping.tools import setup_logging, parse_form
-from amcatscraping.scraping.scraper import (LoginMixin, PropertyCheckMixin,
+from amcatscraping.amcatscraping.tools import setup_logging, parse_form
+from amcatscraping.amcatscraping.scraping.scraper import (LoginMixin, PropertyCheckMixin,
                                             UnitScraper, DateRangeScraper)
 
 
@@ -38,7 +38,7 @@ def parse_section_url(date, section_url):
     return urljoin(base_url, section_url.replace("%PATH%", "/public")) + ".html"
 
 
-class FDScraper(LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper):
+class FinancieelDagbladScraper(LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper):
     def _login(self, username, password):
         login_page = self.session.get(LOGIN_URL)
         login_doc = lxml.html.fromstring(login_page.content)
@@ -109,7 +109,7 @@ class FDScraper(LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper):
     _props = {
         'defaults': {
             'medium': 'Financieel Dagblad',
-            'insertscript': 'FDScraper'
+            'insertscript': 'FinancieelDagbladScraper'
         },
         'required': ['subsection', 'date', 'headline', 'section', 'pagenr', 'text'],
         'expected': []
@@ -118,4 +118,4 @@ class FDScraper(LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper):
 
 if __name__ == '__main__':
     setup_logging()
-    FDScraper().run()
+    FinancieelDagbladScraper().run()

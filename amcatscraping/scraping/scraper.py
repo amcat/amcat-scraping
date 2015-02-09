@@ -18,14 +18,13 @@
 ###########################################################################
 import os
 import sys
-import __main__
 import logging
-
 from datetime import timedelta
 from collections import OrderedDict
 
-from amcatscraping.scraping.httpsession import Session
-from amcatscraping.tools import todatetime, todate, get_arguments, read_date
+import __main__
+from amcatscraping.amcatscraping.scraping.httpsession import Session
+from amcatscraping.amcatscraping.tools import todatetime, todate, get_arguments, read_date
 from amcatclient.amcatclient import AmcatAPI
 
 

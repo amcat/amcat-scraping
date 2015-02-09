@@ -1,12 +1,10 @@
-# -*- coding: utf-8 -*-
-from __future__ import unicode_literals, print_function
 ###########################################################################
 #          (C) Vrije Universiteit, Amsterdam (the Netherlands)            #
 #                                                                         #
 # This file is part of AmCAT - The Amsterdam Content Analysis Toolkit     #
 #                                                                         #
 # AmCAT is free software: you can redistribute it and/or modify it under  #
-# the terms of the GNU Affero General Public License as published by the  #
+# the terms of the GNU Lesser General Public License as published by the  #
 # Free Software Foundation, either version 3 of the License, or (at your  #
 # option) any later version.                                              #
 #                                                                         #
@@ -15,24 +13,21 @@ from __future__ import unicode_literals, print_function
 # FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public     #
 # License for more details.                                               #
 #                                                                         #
-# You should have received a copy of the GNU Affero General Public        #
+# You should have received a copy of the GNU Lesser General Public        #
 # License along with AmCAT.  If not, see <http://www.gnu.org/licenses/>.  #
 ###########################################################################
+from amcatscraping.amcatscraping.scrapers.newspapers import nrc
 
-import pcm
 
-
-class TrouwScraper(pcm.PCMScraper):
+class NRCNextScraper(nrc.NRCScraper):
     def __init__(self, *args, **kwargs):
-        super(TrouwScraper, self).__init__(*args, **kwargs)
-        self._props['defaults']['medium'] = "Trouw"
-        self._props['defaults']['insertscript'] = 'TrouwScraper'
+        super(NRCNextScraper, self).__init__(*args, **kwargs)
+        self._props['defaults']['medium'] = "NRC.NEXT"
+        self._props['defaults']['insertscript'] = "NRCNextScraper"
 
-    domain = "trouw.nl"
-    paper_id = 8004
-    context_id = "NL"
+    nrc_version = "NN"
 
 if __name__ == '__main__':
-    from amcatscraping.tools import setup_logging
+    from amcatscraping.amcatscraping.tools import setup_logging
     setup_logging()
-    TrouwScraper().run()
+    NRCNextScraper().run()

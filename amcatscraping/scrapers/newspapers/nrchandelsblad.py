@@ -16,18 +16,18 @@
 # You should have received a copy of the GNU Lesser General Public        #
 # License along with AmCAT.  If not, see <http://www.gnu.org/licenses/>.  #
 ###########################################################################
-from amcatscraping.scrapers.newspapers import nrc
+from amcatscraping.amcatscraping.scrapers.newspapers import nrc
 
 
-class NRCNextScraper(nrc.NRCScraper):
+class NRCHandelsbladScraper(nrc.NRCScraper):
     def __init__(self, *args, **kwargs):
-        super(NRCNextScraper, self).__init__(*args, **kwargs)
-        self._props['defaults']['medium'] = "NRC.NEXT"
-        self._props['defaults']['insertscript'] = "NRCNextScraper"
+        super(NRCHandelsbladScraper, self).__init__(*args, **kwargs)
+        self._props['defaults']['medium'] = "NRC Handelsblad"
+        self._props['defaults']['insertscript'] = "NRCHandelsbladScraper"
 
-    nrc_version = "NN"
+    nrc_version = "NH"
 
 if __name__ == '__main__':
-    from amcatscraping.tools import setup_logging
+    from amcatscraping.amcatscraping.tools import setup_logging
     setup_logging()
-    NRCNextScraper().run()
+    NRCHandelsbladScraper().run()

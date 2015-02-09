@@ -17,18 +17,19 @@
 # License along with AmCAT.  If not, see <http://www.gnu.org/licenses/>.  #
 ###########################################################################
 
-from amcatscraping.scraping.scraper import LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper
-from amcatscraping.tools import parse_form
-
 import datetime
 import base64
 import uuid
-
 from urllib import quote
 
 import pyamf
 from pyamf import remoting
 from pyamf.flex import messaging
+
+from amcatscraping.amcatscraping.scraping.scraper import LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper
+from amcatscraping.amcatscraping.tools import parse_form
+
+
 
 # Login page
 LOGINURL = "https://caps.{domain}/service/login?service=http%3A%2F%2Fkrant.{domain}%2F%3Fpaper%3D{paper_id}%26zone%3D{regio_code}"

@@ -22,8 +22,8 @@ import collections
 from datetime import date
 import itertools
 
-from amcatscraping.scraping.scraper import UnitScraper, DateRangeScraper, LoginMixin, PropertyCheckMixin
-from amcatscraping.tools import parse_form, setup_logging
+from amcatscraping.amcatscraping.scraping.scraper import UnitScraper, DateRangeScraper, LoginMixin, PropertyCheckMixin
+from amcatscraping.amcatscraping.tools import parse_form, setup_logging
 
 
 Article = collections.namedtuple("Article", ["article_id", "pagenr", "section", "date"])
