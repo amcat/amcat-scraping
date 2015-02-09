@@ -16,7 +16,7 @@
 # You should have received a copy of the GNU Lesser General Public        #
 # License along with AmCAT.  If not, see <http://www.gnu.org/licenses/>.  #
 ###########################################################################
-from amcatscraping.amcatscraping.scrapers.newspapers import pcm
+from amcatscraping.scrapers.newspapers import pcm
 
 
 class AlgemeenDagbladScraper(pcm.PCMScraper):
@@ -31,6 +31,6 @@ class AlgemeenDagbladScraper(pcm.PCMScraper):
 
 
 if __name__ == '__main__':
-    from amcatscraping.amcatscraping.tools import setup_logging
+    from amcatscraping.tools import setup_logging
     setup_logging()
     AlgemeenDagbladScraper().run()

@@ -21,8 +21,8 @@ from datetime import date
 from urlparse import urljoin
 import lxml.html
 
-from amcatscraping.amcatscraping.tools import setup_logging, parse_form
-from amcatscraping.amcatscraping.scraping.scraper import (LoginMixin, PropertyCheckMixin,
+from amcatscraping.tools import setup_logging, parse_form
+from amcatscraping.scraping.scraper import (LoginMixin, PropertyCheckMixin,
                                             UnitScraper, DateRangeScraper)
 
 

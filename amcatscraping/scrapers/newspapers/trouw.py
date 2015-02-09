@@ -19,7 +19,7 @@ from __future__ import unicode_literals, print_function
 # License along with AmCAT.  If not, see <http://www.gnu.org/licenses/>.  #
 ###########################################################################
 
-from amcatscraping.amcatscraping.scrapers.newspapers import pcm
+from amcatscraping.scrapers.newspapers import pcm
 
 
 class TrouwScraper(pcm.PCMScraper):
@@ -33,6 +33,6 @@ class TrouwScraper(pcm.PCMScraper):
     context_id = "NL"
 
 if __name__ == '__main__':
-    from amcatscraping.amcatscraping.tools import setup_logging
+    from amcatscraping.tools import setup_logging
     setup_logging()
     TrouwScraper().run()

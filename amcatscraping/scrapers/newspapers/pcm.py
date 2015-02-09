@@ -26,8 +26,8 @@ import pyamf
 from pyamf import remoting
 from pyamf.flex import messaging
 
-from amcatscraping.amcatscraping.scraping.scraper import LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper
-from amcatscraping.amcatscraping.tools import parse_form
+from amcatscraping.scraping.scraper import LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper
+from amcatscraping.tools import parse_form
 
 
 
@@ -66,6 +66,7 @@ class PCMScraper(LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper):
             'DSMessagingVersion':  1,
             'DSId': 'nil'
         }
+
 
     def _login(self, username, password):
         """

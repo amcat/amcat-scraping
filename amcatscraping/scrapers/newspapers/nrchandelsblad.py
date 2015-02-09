@@ -16,7 +16,7 @@
 # You should have received a copy of the GNU Lesser General Public        #
 # License along with AmCAT.  If not, see <http://www.gnu.org/licenses/>.  #
 ###########################################################################
-from amcatscraping.amcatscraping.scrapers.newspapers import nrc
+from amcatscraping.scrapers.newspapers import nrc
 
 
 class NRCHandelsbladScraper(nrc.NRCScraper):
@@ -28,6 +28,6 @@ class NRCHandelsbladScraper(nrc.NRCScraper):
     nrc_version = "NH"
 
 if __name__ == '__main__':
-    from amcatscraping.amcatscraping.tools import setup_logging
+    from amcatscraping.tools import setup_logging
     setup_logging()
     NRCHandelsbladScraper().run()
