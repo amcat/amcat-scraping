@@ -30,6 +30,19 @@ from lxml import html, etree
 log = logging.getLogger(__name__)
 
 ### MISC ###
+_boolean_states = {
+    '1': True, 'yes': True, 'true': True, 'on': True,
+    '0': False, 'no': False, 'false': False, 'off': False
+}
+
+
+def get_boolean(v):
+    """Convert string to boolean, based on rules of ConfigParser"""
+    if v.lower() not in _boolean_states:
+        raise ValueError, 'Not a boolean: %s' % v
+    return _boolean_states[v.lower()]
+
+
 def setup_django():
     import django
 

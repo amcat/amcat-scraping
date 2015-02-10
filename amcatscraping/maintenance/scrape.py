@@ -1,6 +1,6 @@
 ###########################################################################
-#          (C) Vrije Universiteit, Amsterdam (the Netherlands)            #
-#                                                                         #
+# (C) Vrije Universiteit, Amsterdam (the Netherlands)            #
+# #
 # This file is part of AmCAT - The Amsterdam Content Analysis Toolkit     #
 #                                                                         #
 # AmCAT is free software: you can redistribute it and/or modify it under  #
@@ -43,7 +43,7 @@ import datetime
 from django.core.mail import EmailMultiAlternatives, get_connection
 
 import amcatscraping.tools
-from amcatscraping.tools import read_date, todatetime
+from amcatscraping.tools import read_date, todatetime, get_boolean
 import amcatscraping.scraping.scraper
 
 
@@ -68,7 +68,7 @@ ScraperResult = collections.namedtuple("ScraperResult", ["name", "narticles", "l
 def get_scraper_class(scraper, relative_path):
     scraper_module, scraper_class = relative_path.rsplit(".", 1)
 
-    if not scraper["is_absolute_classpath"]:
+    if not get_boolean(scraper["is_absolute_classpath"]):
         scraper_module = "amcatscraping.scrapers.%s" % scraper_module
 
     scraper_module = __import__(scraper_module, fromlist=["non-empty"])
@@ -132,7 +132,7 @@ def _run(config, args, scrapers):
 
     root_logger = logging.getLogger(amcatscraping.scraping.scraper.__name__)
     for label, scraper in scrapers.items():
-        articles = [] # HACK :-(
+        articles = []  # HACK :-(
         log_buffer = StringIO()
         log_handler = logging.StreamHandler(log_buffer)
         root_logger.addHandler(log_handler)
@@ -232,6 +232,7 @@ def main(config, args):
 
 if __name__ == '__main__':
     from docopt import docopt
+
     amcatscraping.tools.setup_django()
     amcatscraping.tools.setup_logging()
     main(get_config(), docopt(__doc__, sys.argv[1:]))
