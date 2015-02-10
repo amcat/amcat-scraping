@@ -57,7 +57,7 @@ except ImportError:
 
 MODULE_PATH = os.path.abspath(os.path.join(*amcatscraping.__path__))
 ROOT_PATH = os.path.abspath(os.path.join(MODULE_PATH, ".."))
-DEFAULT_CONFIG_FILE = os.path.join(MODULE_PATH, "maintenance/default.conf")
+DEFAULT_CONFIG_FILE = os.path.join(MODULE_PATH, "default.conf")
 USER_CONFIG_FILE = os.path.abspath(os.path.expanduser("~/.scrapers.conf"))
 
 SECTIONS = {"*", "store", "mail"}

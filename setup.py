@@ -8,7 +8,9 @@ setup(
     description="Scrapers for AmCAT",
     author="Wouter van Atteveldt, Martijn Bastiaan, Toon Alfrink",
     author_email="wouter@vanatteveldt.com",
-    packages=["amcatscraping"],
+    packages=["amcatscraping",
+              "amcatscraping.scrapers",
+              "amcatscraping.scrapers.newspapers"],
     classifiers=[
         "License :: OSI Approved :: MIT License",
     ],
