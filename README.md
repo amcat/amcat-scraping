@@ -140,6 +140,6 @@ The latter will email a report similar to the mail shown below:
 
 Running periodically
 ----
-You can use [https://en.wikipedia.org/wiki/Cron Cron] to install periodic jobs on Linux-based systems. To view / edit your current jobs, run <code>crontab -e</code>. To run all scrapers each morning at 11 A.M., add:
+You can use [Cron](https://en.wikipedia.org/wiki/Cron) to install periodic jobs on Linux-based systems. To view / edit your current jobs, run <code>crontab -e</code>. To run all scrapers each morning at 11 A.M., add:
 
-<code>0 11 * * 1  cd ~/amcatscraping; PYTHONPATH=. python amcatscraping/maintenance/run.py --report</code>
+<code>0 11 * * 1  python -m amcatscraping.scrape all --report</code>
