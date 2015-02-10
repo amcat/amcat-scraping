@@ -23,11 +23,11 @@ Configuration is stored in <code>~/.scrapers.conf</code>.
 ```{conf}
 [store]
 # Project and articleset defined per scraper
-host: localhost
-port: 9876
+host: amcat.nl
+port: 443
 username: amcat
 password: amcat
-ssl: false
+ssl: true
 
 [mail]
 host: mail.hmbastiaan.nl
