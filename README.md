@@ -123,7 +123,7 @@ Options:
   --report         Send report to e-mailaddress after scraping</nowiki>
 ```
 
-![Scraper report](http://wiki.amcat.nl/images/4/4d/Scraper_report.png)
+[![Scraper report](http://wiki.amcat.nl/images/thumb/4/4d/Scraper_report.png/173px-Scraper_report.png)](http://wiki.amcat.nl/images/4/4d/Scraper_report.png)
 
 You can use <code>list</code> to list all scrapers installed in <code>~/.scrapers.conf</code>. One can run all scrapers listed their by specifying none:
 
