@@ -1,9 +1,0 @@
-html2text
-cssselect
-pyamf
-jinja2
-django
-docopt
-lxml
--e git+https://github.com/amcat/amcatclient#egg=amcatclient
-
