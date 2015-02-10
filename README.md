@@ -1,80 +1,140 @@
-AmCAT-Scraping
-==============
+Installation
+======
 
-A seperate repository for scraping to AmCAT.
+Clone both amcat-scraping and amcat-client. The latter is used to contact a running AmCAT instance, and push articles.
 
-To install:
-```
-export INSTALLDIR=$HOME #edit this line if you want to install in a different directory
-export AMCAT_HOST=http://amcat.vu.nl
-export AMCAT_USER=xxx
-export AMCAT_PASSWORD=xxx
-
-git clone https://github.com/amcat/amcat-scraping.git $INSTALLDIR/amcatscraping
-git clone https://github.com/vanatteveldt/amcatclient.git $INSTALLDIR/amcatclient
-
-# Install dependencies
-sudo pip install -r $INSTALLDIR/amcatscraping/requirements.txt
-
-# To run scripts in amcatscraping, PYTHONPATH needs to be set to the directory it's in:
-echo >> ~/.bashrc
-echo 'export PYTHONPATH=$PYTHONPATH':$INSTALLDIR >> ~/.bashrc
-
-# To run scrapers at their scheduled time, we use a script that should run every minute. Add it to cron:
-(crontab -l ; echo "* * * * * python "$INSTALLDIR/amcatscraping/maintenance/timed_actions.py $AMCAT_HOST $AMCAT_USER $AMCAT_PASSWORD)| crontab -
+```{sh}
+git clone https://github.com/amcat/amcat-scraping.git amcatscraping
+git clone https://github.com/amcat/amcat-client.git amcatclient
+ln -s amcatclient amcatscraping
 ```
 
-### Different types of scrapers
-
-We have 2 different types of scrapers: periodic and daterange. The former is a scraper without date options. It takes any article that is currently available on the website. This is useful for media that don't come with an archive, such as RSS feeds. The latter takes min datetime and max datetime arguments, and is supposed to scrape only those articles that fall within this range. This is useful for media that do keep an archive, so we can scrape articles from any given date at any time.
-
-### Registering a scraper
+You might need to install dependencies (use `sudo` to become root if needed):
 
 ```
-$ python maintenance/db.py add
-usage: db.py add [-h] [--cron CRON] [--username USERNAME]
-                 [--password PASSWORD] [--label LABEL]
-                 active articleset project {periodic,daterange} classpath
+pip -r install amcatscraping/requirements.txt
 ```
 
-#### Example for a daterange scraper:
+That's it!
+
+Configuration
+====
+
+Configuration is stored in <code>~/.scrapers.conf</code>.
+
+```{conf}
+[store]
+# Project and articleset defined per scraper
+host: localhost
+port: 9876
+username: amcat
+password: amcat
+ssl: false
+
+[mail]
+host: mail.hmbastiaan.nl
+port: 587
+from: spam@hmbastiaan.nl
+to: spam@hmbastiaan.nl
+username: martijn
+password: xxxxxxx
+tls: true
+
+[*]
+# Section with defaults for all scrapers
+articleset: 37
+project: 1
+
+[AD]
+username: xxxxxxxxxxxxxxx
+password: xxxxxxxxxxxxxxx
+class: newspapers.ad.AlgemeenDagbladScraper
 ```
-$ python maintenance/db.py add t 100 10 daterange amcatscraping.scrapers.newspapers.volkskrant.VolksKrantScraper --username user1 --password pass1
+
+Defaults can be found [here](https://github.com/amcat/amcat-scraping/blob/master/amcatscraping/maintenance/default.conf here)
+
+Specific options:
+
+[store]
+------
+
+Defines where articles are saved, after scraping.
+
+<code>host</code> hostname or IP-address of AmCAT instance [default: amcat.nl]
+
+<code>port</code> port to connect to [default: 80]
+
+<code>username / password</code> credentials to use when logging in
+
+<code>ssl</code> use SSL upon connecting (port should probably 443) [default: no]
+
+[mail]
+----
+
+<code>use_django_settings</code> use default Django settings for mail. See the [Django documention on e-mail settings](https://docs.djangoproject.com/en/1.7/ref/settings/#default-from-email) [default: false]
+
+<code>host</code> SMTP server (outgoing) hostname / IP-address
+
+<code>port</code> port to connect to [default: 587]
+
+<code>ssl</code> use ssl [default: no]
+
+<code>tls</code> use tls [default: true]
+
+<code>username / password</code> credentials to use when logging in
+
+[*]
+----
+All settings in this section will be used as defaults for all scrapers. See the following section.
+
+=== [scraper_label] ===
+<code>username / password</code> credentials to use when logging in
+
+<code>class</code> class relative to <code>amcatscraping.scrapers</code>
+
+<code>is_absolute_classpath</code> if this option is enabled, <code>class</code> will be considered an absolute classpath [default: no]
+
+<code>articleset</code> id of articleset in which to store scraped articles
+
+<code>project</code> id of project in which to store scraped articles
+
+== Running ==
+You can use <code>scrape.py</code> to invoke specific, or all scrapers. 
+
+
+```{sh}
+$ PYTHONPATH=. python amcatscraping/maintenance/scrape.py --help
+Run scraper
+
+Usage:
+  scrape.py run [options] [<scraper>...]
+  scrape.py list
+  scrape.py -h | --help
+
+Options:
+  -h --help        Show this screen.
+  --from=<date>    Scrape articles from date (default: today)
+  --to=<date>      Scrape articles up to and including date (default: today)
+  --dry-run        Do not commit to database
+  --report         Send report to e-mailaddress after scraping</nowiki>
 ```
-Daterange scrapers do not need a cron argument, for they are updated all together at 2 AM every night.
 
-#### Example for a periodic scraper:
-```
-$ python maintenance/db.py add t 100 10 periodic amcatscraping.scrapers.tv.teletekst.TeletekstScraper --cron "30 * * * *"
-```
+![Scraper report](http://wiki.amcat.nl/images/4/4d/Scraper_report.png)
 
-Because a cron entry was added during installation, these scrapers will run automatically at their specified times. If you're not familiar with cron, see [this article](http://www.thegeekstuff.com/2009/06/15-practical-crontab-examples/) for an introduction.
+You can use <code>list</code> to list all scrapers installed in <code>~/.scrapers.conf</code>. One can run all scrapers listed their by specifying none:
 
-### Running a scraper manually
+<code>PYTHONPATH=. python amcatscraping/maintenance/run.py</code>
 
-Different scrapers need different arguments, as you'll see in the 'creating a scraper' section. You'll be best off running it without arguments to have it tell you:
+or specific ones by listing them:
 
-```
-$ python scrapers/tv/teletekst.py
-usage: teletekst.py [-h] [--print_errors]
-                    project articleset api_host api_user api_password
-teletekst.py: error: too few arguments
-```
+<code>PYTHONPATH=. python amcatscraping/maintenance/run.py AD FD</code>
 
-We clearly need some place to put the articles and some auth:
+You can mix various options; for example:
 
-```
-$ python scrapers/tv/teletekst.py 1 1 http://amcat.vu.nl secret secret
-	Scraping articles...
-	..........x.x.x.x..
-	Found 15 articles. postprocessing...
-		Filling in defaults...
-		Checking properties...
-	Saving.
-```
+<code>PYTHONPATH=. python amcatscraping/maintenance/run.py AD FD --report --dry-run</code>
 
-Articleset 1 on amcat.vu.nl now contains 15 articles of Teletekst.
+Running periodically
+----
+You can use [https://en.wikipedia.org/wiki/Cron Cron] to install periodic jobs on Linux-based systems. To view / edit your current jobs, run <code>crontab -e</code>. To run all scrapers each morning at 11 A.M., add:
 
-### Creating (coding) a scraper
-
-TBA
+<code>0 11 * * 1  cd ~/amcatscraping; PYTHONPATH=. python amcatscraping/maintenance/run.py --report</code>
