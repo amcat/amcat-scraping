@@ -22,8 +22,8 @@ import lxml.html
 from urlparse import urljoin
 
 from amcatscraping.tools import setup_logging, parse_form
-from amcatscraping.scraping.scraper import (LoginMixin, PropertyCheckMixin,
-                                            UnitScraper, DateRangeScraper)
+from amcatscraping.scraper import (LoginMixin, PropertyCheckMixin,
+                                   UnitScraper, DateRangeScraper)
 
 
 LOGIN_URL = "https://fd.nl/login"

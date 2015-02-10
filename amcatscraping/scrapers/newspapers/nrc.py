@@ -22,8 +22,8 @@ from urlparse import urljoin
 import lxml.html
 
 from amcatscraping.tools import setup_logging, parse_form
-from amcatscraping.scraping.scraper import (LoginMixin, PropertyCheckMixin,
-                                            UnitScraper, DateRangeScraper)
+from amcatscraping.scraper import (LoginMixin, PropertyCheckMixin,
+                                   UnitScraper, DateRangeScraper)
 
 
 OVERVIEW_URL = "https://login.nrc.nl/overview"

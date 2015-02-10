@@ -26,7 +26,7 @@ import pyamf
 from pyamf import remoting
 from pyamf.flex import messaging
 
-from amcatscraping.scraping.scraper import LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper
+from amcatscraping.scraper import LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper
 from amcatscraping.tools import parse_form
 
 

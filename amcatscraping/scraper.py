@@ -26,9 +26,9 @@ from datetime import timedelta
 from collections import OrderedDict
 
 import __main__
-from amcatscraping.scraping.httpsession import Session
-from amcatscraping.tools import todatetime, todate, get_arguments, read_date
-from amcatclient.amcatclient import AmcatAPI
+from .httpsession import Session
+from .tools import todatetime, todate, get_arguments, read_date
+from amcatclient import AmcatAPI
 
 log = logging.getLogger(__name__)
 

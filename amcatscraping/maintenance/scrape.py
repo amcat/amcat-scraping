@@ -44,7 +44,7 @@ from django.core.mail import EmailMultiAlternatives, get_connection
 
 import amcatscraping.tools
 from amcatscraping.tools import read_date, todatetime, get_boolean
-import amcatscraping.scraping.scraper
+import amcatscraping.scraper
 
 
 JINJA_ENV = jinja2.Environment(loader=jinja2.PackageLoader('amcatscraping', 'templates'))
@@ -130,7 +130,7 @@ def _run(config, args, scrapers):
         print("to list existing scrapers")
         sys.exit(1)
 
-    root_logger = logging.getLogger(amcatscraping.scraping.scraper.__name__)
+    root_logger = logging.getLogger(amcatscraping.scraper.__name__)
     for label, scraper in scrapers.items():
         articles = []  # HACK :-(
         log_buffer = StringIO()
