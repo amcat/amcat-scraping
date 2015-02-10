@@ -60,21 +60,22 @@ ROOT_PATH = os.path.abspath(os.path.join(MODULE_PATH, ".."))
 DEFAULT_CONFIG_FILE = os.path.join(MODULE_PATH, "maintenance/default.conf")
 USER_CONFIG_FILE = os.path.abspath(os.path.expanduser("~/.scrapers.conf"))
 
-SECTIONS = {"*", "store", "mail", "report"}
+SECTIONS = {"*", "store", "mail"}
 
 ScraperResult = collections.namedtuple("ScraperResult", ["name", "narticles", "log"])
 
 
-def get_scraper_class(relative_path):
+def get_scraper_class(scraper, relative_path):
     scraper_module, scraper_class = relative_path.rsplit(".", 1)
-    scraper_module = "amcatscraping.scrapers.%s" % scraper_module
+
+    if not scraper["is_absolute_classpath"]:
+        scraper_module = "amcatscraping.scrapers.%s" % scraper_module
+
     scraper_module = __import__(scraper_module, fromlist=["non-empty"])
     return getattr(scraper_module, scraper_class)
 
 
-def run_single(config, args, scraper_name, scraper_class):
-    scraper_config = dict(dict(config.items("*")), **dict(config.items(scraper_name)))
-
+def run_single(config, args, scraper_config, scraper_class):
     # Scraper config
     articleset_id = int(scraper_config["articleset"])
     project_id = int(scraper_config["project"])
@@ -118,6 +119,10 @@ def _run(config, args, scrapers):
     all_scrapers = dict(get_scrapers(config))
     scrapers = {label: all_scrapers[label] for label in scrapers} or all_scrapers
 
+    if not scrapers:
+        print("No scrapers found.")
+        sys.exit(1)
+
     non_existing_scrapers = set(scrapers) - set(all_scrapers)
     if non_existing_scrapers:
         print("Scraper(s) not found: %s. Use:\n" % ", ".join(non_existing_scrapers))
@@ -133,8 +138,8 @@ def _run(config, args, scrapers):
         root_logger.addHandler(log_handler)
 
         try:
-            scraper_class = get_scraper_class(scraper["class"])
-            articles.append(run_single(config, args, label, scraper_class))
+            scraper_class = get_scraper_class(scraper, scraper["class"])
+            articles.append(run_single(config, args, scraper, scraper_class))
         finally:
             root_logger.removeHandler(log_handler)
             narticles = len(articles.pop()) if articles else 0
@@ -146,7 +151,6 @@ def run(config, args, scrapers):
     for label, narticles, log in _run(config, args, scrapers):
         logs[label] = (narticles, log)
 
-    print(args)
     if args["--report"]:
         _send_email(config, logs)
 
@@ -214,6 +218,8 @@ def list_scrapers(config):
         print("class: %s" % scraper.get("class"))
         print("project: %s" % scraper.get("project"))
         print("articleset: %s" % scraper.get("articleset"))
+    else:
+        print("\nNo scrapers configured")
 
 
 def main(config, args):
