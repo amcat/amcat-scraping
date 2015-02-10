@@ -3,7 +3,7 @@
 from distutils.core import setup
 
 setup(
-    version='0.12',
+    version='0.13',
     name="amcatscraping",
     description="Scrapers for AmCAT",
     author="Wouter van Atteveldt, Martijn Bastiaan, Toon Alfrink",
@@ -12,7 +12,7 @@ setup(
               "amcatscraping.scrapers",
               "amcatscraping.scrapers.newspapers"],
     package_data={
-      'amcatscraping': ['templates/*.txt'],
+      'amcatscraping': ['templates/*.html'],
    },
     classifiers=[
         "License :: OSI Approved :: MIT License",
