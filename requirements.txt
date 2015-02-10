@@ -1,5 +1,6 @@
 html2text
-mailer
 cssselect
 pyamf
-httplib2
+jinja2
+django
+docopt
