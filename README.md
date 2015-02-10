@@ -87,7 +87,9 @@ Defines where articles are saved, after scraping.
 ----
 All settings in this section will be used as defaults for all scrapers. See the following section.
 
-=== [scraper_label] ===
+[scraper_label]
+----
+
 <code>username / password</code> credentials to use when logging in
 
 <code>class</code> class relative to <code>amcatscraping.scrapers</code>
@@ -98,7 +100,9 @@ All settings in this section will be used as defaults for all scrapers. See the 
 
 <code>project</code> id of project in which to store scraped articles
 
-== Running ==
+Running
+----
+
 You can use <code>scrape.py</code> to invoke specific, or all scrapers. 
 
 
