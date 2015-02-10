@@ -58,7 +58,7 @@ class NRCScraper(LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper):
         doc1 = self.session.get_html(url1)
         yield doc1
         for a in doc1.cssselect("ul.main-sections li:not(.active) a.section-link"):
-            yield self.session.get_html(a)
+            yield self.session.get_html(urljoin(a.base_url, a.get("href")))
 
     def _scrape_unit(self, url):
         doc = self.session.get_html(url)

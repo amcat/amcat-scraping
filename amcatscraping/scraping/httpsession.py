@@ -32,7 +32,7 @@ class Session(requests.Session):
         })
 
     def get_html(self, link, **kwargs):
-        return lxml.html.fromstring(self.get(link, **kwargs).content)
+        return lxml.html.fromstring(self.get(link, **kwargs).content, base_url=link)
 
     def get(self, link, **kwargs):
         return super(Session, self).get(link.strip(), **kwargs)
