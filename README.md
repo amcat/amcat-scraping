@@ -1,21 +1,19 @@
 Installation
 ======
 
-Clone both amcat-scraping and amcat-client. The latter is used to contact a running AmCAT instance, and push articles.
+Install amcat-scraping and amcatclient directly from github using pip:
 
 ```{sh}
-git clone https://github.com/amcat/amcat-scraping.git amcatscraping
-git clone https://github.com/amcat/amcat-client.git amcatclient
-ln -s amcatclient amcatscraping
+pip install git+git://github.com/amcat/amcatclient git+git://github.com/amcat/amcat-scraping
 ```
 
-You might need to install dependencies (use `sudo` to become root if needed):
+(Note, you should probably either work in a python virtual environment, or use sudo to install system-wide)
 
-```
-pip -r install amcatscraping/requirements.txt
-```
+The scrapers can be run using the `amcatscraping.scrape` module: (see below for configuration and options)
 
-That's it!
+```{sh}
+python -m amcatscraping.scrape --help
+```
 
 Configuration
 ====
@@ -103,11 +101,11 @@ All settings in this section will be used as defaults for all scrapers. See the 
 Running
 ----
 
-You can use <code>scrape.py</code> to invoke specific, or all scrapers. 
+You can directly call <code>amcatscraping.scrape</code> to invoke specific, or all scrapers. 
 
 
 ```{sh}
-$ PYTHONPATH=. python amcatscraping/maintenance/scrape.py --help
+$ python -m amcatscraping.scrape --help
 Run scraper
 
 Usage:
@@ -123,7 +121,6 @@ Options:
   --report         Send report to e-mailaddress after scraping</nowiki>
 ```
 
-[![Scraper report](http://wiki.amcat.nl/images/thumb/4/4d/Scraper_report.png/173px-Scraper_report.png)](http://wiki.amcat.nl/images/4/4d/Scraper_report.png)
 
 You can use <code>list</code> to list all scrapers installed in <code>~/.scrapers.conf</code>. One can run all scrapers listed their by specifying none:
 
@@ -136,6 +133,10 @@ or specific ones by listing them:
 You can mix various options; for example:
 
 <code>PYTHONPATH=. python amcatscraping/maintenance/run.py AD FD --report --dry-run</code>
+
+The latter will email a report similar to the mail shown below:
+
+[![Scraper report](http://wiki.amcat.nl/images/thumb/4/4d/Scraper_report.png/173px-Scraper_report.png)](http://wiki.amcat.nl/images/4/4d/Scraper_report.png)
 
 Running periodically
 ----
