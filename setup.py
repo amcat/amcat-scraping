@@ -23,6 +23,6 @@ setup(
         "amcatclient",
     ],
     dependency_links = [
-        "https://github.com/amcat/amcatclient#egg=amcatclient",
+        "https://github.com/amcat/amcatclient#egg=amcatclient-0.10",
     ]
 )
