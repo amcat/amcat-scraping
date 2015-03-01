@@ -24,7 +24,7 @@ import time
 import argparse
 from datetime import datetime, date
 
-from html2text import html2text as html_to_text
+from html2text import HTML2Text
 from lxml import html, etree
 
 log = logging.getLogger(__name__)
@@ -53,13 +53,22 @@ def setup_django():
         django.setup()
 
 
-def html2text(data):
-    if type(data) == list:
-        return "".join([html2text(bit) for bit in data])
-    elif type(data) in (str, unicode):
-        return html_to_text(data)
-    elif type(data) in (html.HtmlElement, etree._Element):
-        return html_to_text(html.tostring(data)).strip()
+def _html2text(data, handler):
+    if isinstance(data, basestring):
+        return handler.handle(data).strip()
+
+    if isinstance(data, (html.HtmlElement, etree._Element)):
+        return html2text(html.tostring(data))
+
+    # Assume iterable
+    return "\n\n".join(html2text(bit) for bit in data)
+
+
+def html2text(data, bodywidth=0, baseurl='', ignore_links=True, ignore_images=True):
+    handler = HTML2Text(baseurl=baseurl, bodywidth=bodywidth)
+    handler.ignore_links = ignore_links
+    handler.ignore_images = ignore_images
+    return _html2text(data, handler)
 
 
 def parse_form(form):
