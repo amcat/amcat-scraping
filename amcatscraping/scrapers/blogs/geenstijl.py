@@ -97,6 +97,9 @@ class GeenstijlScraper(PropertyCheckMixin, UnitScraper, DateRangeScraper):
 
         comments = article_doc.cssselect("#comments article")
 
+        if not headline:
+            return None
+
         return {
             "date": timestamp,
             "headline": headline,
