@@ -19,7 +19,7 @@
 from collections import defaultdict
 import datetime
 
-from amcatscraping.scraper import UnitScraper, DateRangeScraper
+from amcatscraping.scraper import UnitScraper, DateRangeScraper, PropertyCheckMixin
 from amcatscraping.tools import html2text, read_date
 
 
@@ -41,11 +41,12 @@ def _parse_comment_footer(footer):
     return author, timestamp
 
 
-class GeenstijlScraper(UnitScraper, DateRangeScraper):
+class GeenstijlScraper(PropertyCheckMixin, UnitScraper, DateRangeScraper):
     def __init__(self, *args, **kwargs):
         super(GeenstijlScraper, self).__init__(*args, **kwargs)
         self.articles = defaultdict(set)
         self.session.encoding = "iso-8859-1"
+
 
     def _get_units(self):
         for date in self.dates:
@@ -78,7 +79,7 @@ class GeenstijlScraper(UnitScraper, DateRangeScraper):
         return {
             "date": timestamp,
             "headline": headline,
-            "text": text,
+            "text": text.strip() or ".",
             "author": author,
             "url": url
         }
@@ -99,11 +100,18 @@ class GeenstijlScraper(UnitScraper, DateRangeScraper):
         return {
             "date": timestamp,
             "headline": headline,
-            "text": text,
+            "text": text.strip() or ".",
             "author": author,
             "url": article_url,
             "children": [self._parse_comment(c, headline, article_url) for c in comments]
         }
 
+    _props = {
+        'defaults': {
+            'medium': "Geenstijl"
+        },
+        'required': ['date', 'text', 'headline', 'author'],
+        'expected': []
+    }
 
 
