@@ -79,8 +79,8 @@ def run_single(config, args, scraper_config, scraper_class):
     # Scraper config
     articleset_id = int(scraper_config["articleset"])
     project_id = int(scraper_config["project"])
-    username = scraper_config["username"]
-    password = scraper_config["password"]
+    username = scraper_config.get("username")
+    password = scraper_config.get("password")
 
     # Store config
     protocol = "https" if config.getboolean("store", "ssl") else "http"
