@@ -29,6 +29,9 @@ Options:
   --to=<date>      Scrape articles up to and including date (default: today)
   --dry-run        Do not commit to database
   --report         Send report to e-mailaddress after scraping
+  --batched        Regularly save to database. This prevents scraping from using too much memory,
+                   but may leave articlesets half-filled in case of errors.
+
 
 """
 import collections
@@ -107,6 +110,7 @@ def run_single(config, args, scraper_config, scraper_class):
         "log_errors": True,
         "min_datetime": min_datetime,
         "max_datetime": max_datetime,
+        "batched": args["--batched"]
     }
 
     if args["--dry-run"]:

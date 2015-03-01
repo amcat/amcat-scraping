@@ -23,6 +23,7 @@ import sys
 import logging
 from datetime import timedelta
 from collections import OrderedDict
+import itertools
 
 from .httpsession import Session
 from .tools import todatetime, todate, get_arguments, read_date
@@ -35,8 +36,14 @@ ARGLIST = OrderedDict((
     ('project', {'type': int}),
     ('articleset', {'type': int}),
     (('api_host', 'api_user', 'api_password'), {}),
-    ('--log_errors', {'action': 'store_const', 'const': True})
+    ('--log_errors', {'action': 'store_const', 'const': True}),
+    ('--batched', {'action': 'store_const', 'const': True})
 ))
+
+
+def count_articles(articles):
+    children = filter(None, (a.get("children", ()) for a in articles))
+    return len(articles) + sum(map(count_articles, children))
 
 
 class Scraper(object):
@@ -46,21 +53,10 @@ class Scraper(object):
         self.project_id = self.options["project"]
         self.articleset_id = self.options["articleset"]
 
-    def run(self, input=None):
-        log.info("Scraping articles...")
-        articles = []
-        for a in self._scrape():
-            articles.append(a)
-            print(".", end="")
-            sys.stdout.flush()
-        print("")
-
-        log.info("Found {} articles. Postprocessing...".format(len(articles)))
-        articles = list(self._postprocess(articles))
-
+    def save(self, articles):
         if self.options.get("command") == "test":
-            log.info("Scraper returned %s articles", len(articles))
-            return articles
+            log.info("Scraper returned %s articles (not saving due to --dry-run)", len(articles))
+            return enumerate(articles)
 
         log.info("Saving..")
         return self._save(
@@ -69,6 +65,33 @@ class Scraper(object):
             self.options['api_user'],
             self.options['api_password']
         )
+
+    def run_batches(self, batch_size=100):
+        articles = []
+        log.info("Running scraper in batched mode..")
+        for a in self._scrape():
+            articles.append(a)
+            size = count_articles(articles)
+            if size >= batch_size:
+                log.info("Accumulated {size} articles. Preprocessing / saving..".format(**locals()))
+                yield self.save(list(self._postprocess(articles)))
+                articles = []
+        yield self.save(list(self._postprocess(articles)))
+
+    def run(self, input=None):
+        if self.options["batched"]:
+            return list(itertools.chain.from_iterable(self.run_batches()))
+
+        log.info("Scraping articles...")
+        articles = []
+        for a in self._scrape():
+            articles.append(a)
+            print(".", end="")
+            sys.stdout.flush()
+        print("")
+
+        log.info("Found {} articles. Postprocessing...".format(count_articles(articles)))
+        return self.save(list(self._postprocess(articles)))
 
     def _scrape(self):
         """Scrape the target resource and return a sequence of article dicts"""
@@ -99,7 +122,9 @@ class UnitScraper(Scraper):
     def _scrape(self):
         for unit in self._get_units():
             try:
-                yield self._scrape_unit(unit)
+                unit = self._scrape_unit(unit)
+                if unit is not None:
+                    yield unit
             except Exception as e:
                 if self.options['log_errors']:
                     log.exception(e)
@@ -187,28 +212,33 @@ class PropertyCheckMixin(object):
 
     def _postprocess(self, articles):
         articles = super(PropertyCheckMixin, self)._postprocess(articles)
-        articles = self._add_defaults(articles)
+        self._add_defaults(articles)
         self._check_properties(articles)
         return articles
 
     def _add_defaults(self, articles):
-        log.info("Filling in defaults...")
         self._props['defaults']['project'] = self.options['project']
         self._props['defaults']['metastring'] = {}
+
         for prop, default in self._props['defaults'].items():
             for article in articles:
-                if not article.get(prop):
+                if prop not in article:
                     article[prop] = default
-        return articles
+
+        for article in articles:
+            self._add_defaults(article.get("children", ()))
 
     def _check_properties(self, articles):
-        log.info("Checking properties...")
+        if not articles:
+            return
+
         for prop in self._props['required']:
-            if not all(
-                    [article.get(prop) or article['metastring'].get(prop) for article in articles]):
+            if not all(prop in article or prop in article['metastring'] for article in articles):
                 raise ValueError("{prop} missing in at least one article".format(**locals()))
-        if articles:
-            for prop in self._props['expected']:
-                if not any([article.get(prop) or article['metastring'].get(prop) for article in
-                            articles]):
-                    raise ValueError("{prop} missing in all articles".format(**locals()))
+
+        for prop in self._props['expected']:
+            if not any(prop in article or prop in article['metastring'] for article in articles):
+                raise ValueError("{prop} missing in all articles".format(**locals()))
+
+        for article in articles:
+            self._add_defaults(article.get("children", ()))
