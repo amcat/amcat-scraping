@@ -19,16 +19,15 @@
 from __future__ import print_function
 
 from operator import itemgetter
-import os
 import sys
 import logging
 from datetime import timedelta
 from collections import OrderedDict
 
-import __main__
 from .httpsession import Session
 from .tools import todatetime, todate, get_arguments, read_date
-from amcatclient import AmcatAPI
+
+from amcatclient.amcatclient import AmcatAPI
 
 log = logging.getLogger(__name__)
 
@@ -38,20 +37,6 @@ ARGLIST = OrderedDict((
     (('api_host', 'api_user', 'api_password'), {}),
     ('--log_errors', {'action': 'store_const', 'const': True})
 ))
-
-
-def getpath(cls):
-    """Get class path even if it's __main__
-
-    TODO: Fix.. it relies on PYTHONPATH, seriously? :-/"""
-    if cls.__module__ == "__main__":
-        pythonpath = os.environ.get('PYTHONPATH', '')
-        filepath = sys.path[0].split(pythonpath, 1)[1].strip("/")
-        modulepath = ".".join(filepath.split("/"))
-        filename = os.path.splitext(os.path.basename(__main__.__file__))[0]
-        return modulepath + "." + filename
-    else:
-        return cls.__module__
 
 
 class Scraper(object):
@@ -91,10 +76,7 @@ class Scraper(object):
 
     def _postprocess(self, articles):
         """Space to do something with the unsaved articles that the scraper provided"""
-        for a in articles:
-            if a:
-                a['insertscript'] = getpath(self.__class__) + "." + self.__class__.__name__
-                yield a
+        return filter(None, articles)
 
     def _save(self, articles, *auth):
         api = AmcatAPI(*auth)
@@ -140,20 +122,20 @@ class DateRangeScraper(Scraper):
                      {'type': lambda x: todatetime(read_date(x))}))
         return args
 
+    def _get_dates(self, min_datetime, max_datetime):
+        for n in range((max_datetime - min_datetime).days + 1):
+            yield todate(min_datetime + timedelta(days=n))
+
     def __init__(self, **kwargs):
         super(DateRangeScraper, self).__init__(**kwargs)
-        n_days = (self.options['max_datetime'] - self.options['min_datetime']).days
-        self.dates = map(todate,
-                         [self.options['min_datetime'] + timedelta(days=x) for x in
-                          range(n_days + 1)])
-        self.mindatetime = self.options['min_datetime']
-        self.maxdatetime = self.options['max_datetime']
+        self.min_date = todate(self.options['min_datetime'])
+        self.max_date = todate(self.options['max_datetime'])
+        self.dates = list(self._get_dates(self.min_date, self.max_date))
 
     def _postprocess(self, articles):
         articles = list(super(DateRangeScraper, self)._postprocess(articles))
         for a in articles:
-            _date = todatetime(a['date'])
-            assert self.mindatetime <= _date <= self.maxdatetime
+            assert self.min_date <= todate(a['date']) <= self.max_date
         return articles
 
 
@@ -173,8 +155,11 @@ class LoginMixin(object):
     def _scrape(self, *args, **kwargs):
         username = self.options['username']
         password = self.options['password']
+
         # Please ensure _login returns True on success
-        assert self._login(username, password)
+        if not self._login(username, password):
+            raise ValueError("Login routine returned False. Are your credentials correct?")
+
         return super(LoginMixin, self)._scrape(*args, **kwargs)
 
     def _login(self, username, password):
