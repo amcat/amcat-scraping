@@ -66,15 +66,18 @@ class Scraper(object):
             self.options['api_password']
         )
 
-    def run_batches(self, batch_size=100):
+    def run_batches(self, batch_size=1000):
         articles = []
         log.info("Running scraper in batched mode..")
         for a in self._scrape():
+            print(".", end="")
+            sys.stdout.flush()
             articles.append(a)
             size = count_articles(articles)
             if size >= batch_size:
                 log.info("Accumulated {size} articles. Preprocessing / saving..".format(**locals()))
                 yield self.save(list(self._postprocess(articles)))
+                print("")
                 articles = []
         yield self.save(list(self._postprocess(articles)))
 

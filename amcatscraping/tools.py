@@ -16,6 +16,7 @@
 # You should have received a copy of the GNU Lesser General Public        #
 # License along with AmCAT.  If not, see <http://www.gnu.org/licenses/>.  #
 ###########################################################################
+from collections import OrderedDict
 
 import logging
 import sys
@@ -335,3 +336,30 @@ def read_date(string, lax=False, rejectPre1970=False, american=False):
             raise
 
 
+### CACHING ###
+def memoize(f):
+    cache = LimitedSizeDict(size_limit=200)
+
+    def wrapper(*args):
+        if args in cache:
+            return cache[args]
+        cache[args] = f(*args)
+        return cache[args]
+
+    return wrapper
+
+
+class LimitedSizeDict(OrderedDict):
+    def __init__(self, *args, **kwds):
+        self.size_limit = kwds.pop("size_limit", None)
+        OrderedDict.__init__(self, *args, **kwds)
+        self._check_size_limit()
+
+    def __setitem__(self, key, value, **kwargs):
+        OrderedDict.__setitem__(self, key, value, **kwargs)
+        self._check_size_limit()
+
+    def _check_size_limit(self):
+        if self.size_limit is not None:
+            while len(self) > self.size_limit:
+                self.popitem(last=False)
