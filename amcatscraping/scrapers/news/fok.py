@@ -209,7 +209,7 @@ class FOKScraper(PropertyCheckMixin, UnitScraper, DateRangeScraper):
                 "author": author,
                 "headline": headline,
                 "section": section,
-                "text": text,
+                "text": text.strip() or ".",
                 "date": date,
                 "url": url + "#" + comment_id,
                 "metastring": {
@@ -240,7 +240,7 @@ class FOKScraper(PropertyCheckMixin, UnitScraper, DateRangeScraper):
             "headline": headline,
             "date": date,
             "section": section,
-            "text": text,
+            "text": text.strip() or ".",
             "url": url,
             "metastring": {
                 "article_id": article_id
