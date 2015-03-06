@@ -18,6 +18,7 @@
 ###########################################################################
 from __future__ import print_function
 
+import time
 import datetime
 import sys
 import logging
@@ -37,8 +38,9 @@ def count_articles(articles):
 
 
 class Scraper(object):
-    def __init__(self, project_id, articleset_id, batched=False, dry_run=False, api_host=None, api_user=None, api_password=None, **kwargs):
+    def __init__(self, project_id, articleset_id, batched=False, batch_size=1000, dry_run=False, api_host=None, api_user=None, api_password=None, **kwargs):
         self.batched = batched
+        self.batch_size = batch_size
         self.dry_run = dry_run
 
         self.project_id = project_id
@@ -75,7 +77,7 @@ class Scraper(object):
         """Space to do something with the unsaved articles that the scraper provided"""
         return filter(None, articles)
 
-    def run_batches(self, batch_size=1000):
+    def run_batches(self, batch_size=None):
         articles = []
         article_count = 0
 
@@ -104,8 +106,7 @@ class Scraper(object):
         yield self.save(list(self.postprocess(articles)))
 
     def run(self):
-        batch_size = 1000 if self.batched else 0
-        articles = list(itertools.chain.from_iterable(self.run_batches(batch_size)))
+        articles = list(itertools.chain.from_iterable(self.run_batches(self.batch_size)))
         log.info("Saved a total of {alen} articles.".format(alen=len(articles)))
         return articles
 
@@ -132,7 +133,7 @@ class UnitScraper(Scraper):
             log.exception(e)
 
     def scrape(self):
-        for article in itertools.imap(self._scrape, self.get_units()):
+        for article in itertools.imap(self.scrape_unit, self.get_units()):
             if article is not None:
                 yield article
 
@@ -170,9 +171,22 @@ class ContinuousScraper(DateRangeScraper):
     """Blocks until an article of with a date greater than max_datetime is reached.
     min_datetime is ignored, but can be used to update articles. Continious scrapers
     typically don't include comments, but require the user to run update() periodically."""
+    def __init__(self, timeout=60, **kwargs):
+        """@param timeout: (if applicable) check for updates every N seconds"""
+        super(ContinuousScraper, self).__init__(**kwargs)
+        self.timeout = timeout
+
+    def _scrape(self):
+        while True:
+            for article in super(ContinuousScraper, self).scrape():
+                yield article
+            time.sleep(self.timeout)
+
     def scrape(self):
-        articles = super(ContinuousScraper, self).scrape()
-        return itertools.takewhile(lambda a: to_date(a["date"]) <= self.max_date, articles)
+        articles = self._scrape()
+        articles = itertools.dropwhile(lambda a: to_date(a["date"]) < self.min_date, articles)
+        articles = itertools.takewhile(lambda a: to_date(a["date"]) <= self.min_date, articles)
+        return articles
 
 
 class LoginMixin(object):

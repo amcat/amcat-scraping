@@ -31,6 +31,8 @@ Options:
   --report         Send report to e-mailaddress after scraping
   --batched        Regularly save to database. This prevents scraping from using too much memory,
                    but may leave articlesets half-filled in case of errors.
+  --batch-size=<n> If running in batched mode, this determines the batch size. For continuous
+                   scrapers a low value is suitable for "real-time" purposes (default: 1000).
 
 
 """
@@ -113,7 +115,8 @@ def run_single(config, args, scraper_config, scraper_class):
         "min_date": min_date,
         "max_date": max_date,
         "batched": args["--batched"],
-        "dry_run": args["--dry-run"]
+        "dry_run": args["--dry-run"],
+        "batch_size": int(args.get("--batch-size", 1000))
     }
 
     try:
