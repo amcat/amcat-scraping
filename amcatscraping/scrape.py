@@ -46,7 +46,7 @@ import datetime
 from django.core.mail import EmailMultiAlternatives, get_connection
 
 import amcatscraping.tools
-from amcatscraping.tools import read_date, todatetime, get_boolean
+from amcatscraping.tools import read_date, get_boolean, to_date
 import amcatscraping.scraper
 
 
@@ -57,6 +57,8 @@ try:
     import configparser
 except ImportError:
     import ConfigParser as configparser
+
+log = logging.getLogger(__name__)
 
 MODULE_PATH = os.path.abspath(os.path.join(*amcatscraping.__path__))
 ROOT_PATH = os.path.abspath(os.path.join(MODULE_PATH, ".."))
@@ -91,32 +93,35 @@ def run_single(config, args, scraper_config, scraper_class):
     host_username = config.get("store", "username")
     host_password = config.get("store", "password")
 
-    min_datetime = max_datetime = todatetime(datetime.date.today())
+    min_date = max_date = datetime.date.today()
 
     if args["--from"]:
-        min_datetime = todatetime(read_date(args["--from"]))
+        min_date = to_date(read_date(args["--from"]))
 
     if args["--to"]:
-        max_datetime = todatetime(read_date(args["--to"]))
+        max_date = to_date(read_date(args["--to"]))
 
     opts = {
-        "project": project_id,
-        "articleset": articleset_id,
+        "project_id": project_id,
+        "articleset_id": articleset_id,
         "api_host": host_url,
         "api_user": host_username,
         "api_password": host_password,
         "username": username,
         "password": password,
         "log_errors": True,
-        "min_datetime": min_datetime,
-        "max_datetime": max_datetime,
-        "batched": args["--batched"]
+        "min_date": min_date,
+        "max_date": max_date,
+        "batched": args["--batched"],
+        "dry_run": args["--dry-run"]
     }
 
-    if args["--dry-run"]:
-        opts["command"] = "test"
+    try:
+        return scraper_class(**opts).run()
+    except Exception as e:
+        log.exception("Running scraper {scraper_class.__name__} resulted in an exception:".format(**locals()))
 
-    return scraper_class(**opts).run()
+    return []
 
 
 def _run(config, args, scrapers):

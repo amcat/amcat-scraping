@@ -37,14 +37,14 @@ def mkdate(string):
 
 
 class TelegraafScraper(LoginMixin,PropertyCheckMixin,UnitScraper,DateRangeScraper):
-    def _login(self, username, password):
+    def login(self, username, password):
         self.session.get(WEEK_URL)
         form = parse_form(self.session.get_html(LOGIN_URL).cssselect("#user-login")[0])
         form.update({"name": username, "pass": password})
         self.session.headers.update({"Referer": LOGIN_URL})
         return "close-iframe" in self.session.post(LOGIN_URL, form).url
 
-    def _get_units(self):
+    def get_units(self):
         data = self.session.get("http://www.telegraaf.nl/telegraaf-i/newspapers").json()
         papers = [paper for paper in data if mkdate(paper['date']) in self.dates]
 
@@ -54,7 +54,7 @@ class TelegraafScraper(LoginMixin,PropertyCheckMixin,UnitScraper,DateRangeScrape
                     section = [s['title'] for s in paper['sections'] if page['page_number'] in s['pages']][0]
                     yield Article(article_id, page['page_number'], section, mkdate(paper['date']))
 
-    def _scrape_unit(self, article):
+    def scrape_unit(self, article):
         article_id, pagenr, section, date = article
 
         if section == "Advertentie":

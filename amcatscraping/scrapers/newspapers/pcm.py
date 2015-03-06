@@ -68,7 +68,7 @@ class PCMScraper(LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper):
         }
 
 
-    def _login(self, username, password):
+    def login(self, username, password):
         """
         Parse login form and fill in wanted parts
         """
@@ -123,9 +123,10 @@ class PCMScraper(LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper):
 
         env = self.create_envelope(self.create_request(com))
         res = self.apiget(env)
-        return True
 
-    def _get_units(self):
+        return "ErrorMessage" not in str(res)
+
+    def get_units(self):
         latest = self._get_latest()
         for date in self.dates:
             page = latest.get(date)
@@ -140,7 +141,7 @@ class PCMScraper(LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper):
                         continue
                     yield (index, art)
 
-    def _scrape_unit(self, (index,art)):
+    def scrape_unit(self, (index,art)):
         article = {'metastring':{}}
         article['author'] = art['author'][:100] if art['author'] else ''
         article['headline'] = art['title']
@@ -242,6 +243,8 @@ class PCMScraper(LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper):
 
         env = self.create_envelope(self.create_request(rmsg))
         resp = self.apiget(env).bodies[0][1]
+
+        print(resp)
 
         for spread in resp.body.body['spreads']:
             for page in [spread.get(p) for p in ('leftPage', 'rightPage')]:

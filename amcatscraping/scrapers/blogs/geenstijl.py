@@ -26,10 +26,6 @@ from amcatscraping.tools import html2text, read_date
 ARCHIEF_URL = "http://www.geenstijl.nl/mt/archieven/maandelijks/%Y/%m/"
 
 
-def get_day_string(day):
-    return "%d-%m-%y"
-
-
 def _parse_comment_footer(footer):
     author, date, time = footer.rsplit("|", 2)
 
@@ -42,13 +38,12 @@ def _parse_comment_footer(footer):
 
 
 class GeenstijlScraper(PropertyCheckMixin, UnitScraper, DateRangeScraper):
-    def __init__(self, *args, **kwargs):
-        super(GeenstijlScraper, self).__init__(*args, **kwargs)
+    def __init__(self, **kwargs):
+        super(GeenstijlScraper, self).__init__(**kwargs)
         self.articles = defaultdict(set)
         self.session.encoding = "iso-8859-1"
 
-
-    def _get_units(self):
+    def get_units(self):
         for date in self.dates:
             day_string = date.strftime("%d-%m-%y")
 
@@ -84,7 +79,7 @@ class GeenstijlScraper(PropertyCheckMixin, UnitScraper, DateRangeScraper):
             "url": url
         }
 
-    def _scrape_unit(self, date_and_article_url):
+    def scrape_unit(self, date_and_article_url):
         date, article_url = date_and_article_url
         article_doc = self.session.get_html(article_url)
 

@@ -35,7 +35,7 @@ class NRCScraper(LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper):
     def __init__(self, *args, **kwargs):
         super(NRCScraper, self).__init__(*args, **kwargs)
 
-    def _login(self, username, password):
+    def login(self, username, password):
         login_page = self.session.get(OVERVIEW_URL)
         login_doc = lxml.html.fromstring(login_page.content)
         login_url = login_page.url
@@ -46,7 +46,7 @@ class NRCScraper(LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper):
         response = self.session.post(login_url, post)
         return response.url.endswith("/overview")
 
-    def _get_units(self):
+    def get_units(self):
         for date in self.dates:
             for doc in self.__getsections(date):
                 for a in doc.cssselect("ul.article-links li > a"):
@@ -60,7 +60,7 @@ class NRCScraper(LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper):
         for a in doc1.cssselect("ul.main-sections li:not(.active) a.section-link"):
             yield self.session.get_html(urljoin(a.base_url, a.get("href")))
 
-    def _scrape_unit(self, url):
+    def scrape_unit(self, url):
         doc = self.session.get_html(url)
         datestr = url.split("/")[7].strip("_")
         location = doc.cssselect("em.location")

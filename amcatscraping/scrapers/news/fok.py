@@ -156,12 +156,12 @@ class FOKScraper(PropertyCheckMixin, UnitScraper, DateRangeScraper):
         # Binary search, here we go.
         return self._get_first_id(date, left_date, right_date)
 
-    def _get_dates(self, min_datetime, max_datetime):
-        if min_datetime < datetime.date(1999, 9, 30):
+    def _get_dates(self, min_date, max_date):
+        if min_date < datetime.date(1999, 9, 30):
             raise ValueError("FOK's oldest articles was posted on 1999-09-30")
-        return super(FOKScraper, self)._get_dates(min_datetime, max_datetime)
+        return super(FOKScraper, self)._get_dates(min_date, max_date)
 
-    def _get_units(self):
+    def get_units(self):
         first_date = list(self.dates)[0]
         last_date = list(self.dates)[-1]
         article_id = self.get_first_id(first_date)
@@ -219,7 +219,7 @@ class FOKScraper(PropertyCheckMixin, UnitScraper, DateRangeScraper):
                 },
             }
 
-    def _scrape_unit(self, article_id):
+    def scrape_unit(self, article_id):
         url = ARTILCE_URL.format(**locals())
         doc = self.session.get_html(url)
         article = doc.cssselect("article")

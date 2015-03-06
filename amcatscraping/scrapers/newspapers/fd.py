@@ -39,7 +39,7 @@ def parse_section_url(date, section_url):
 
 
 class FinancieelDagbladScraper(LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper):
-    def _login(self, username, password):
+    def login(self, username, password):
         login_page = self.session.get(LOGIN_URL)
         login_doc = lxml.html.fromstring(login_page.content)
         login_form = login_doc.cssselect("form.login")[0]
@@ -77,7 +77,7 @@ class FinancieelDagbladScraper(LoginMixin, PropertyCheckMixin, UnitScraper, Date
             _, url, _ = area.get('onclick').split("'")
             yield "%s_body.html" % urljoin(entry.url, url).rstrip(".html")
 
-    def _get_units(self):
+    def get_units(self):
         for date in self.dates:
             for entry in self._get_sections(date):
                 for article_url in set(self._get_articles(entry)):
@@ -85,7 +85,7 @@ class FinancieelDagbladScraper(LoginMixin, PropertyCheckMixin, UnitScraper, Date
                     yield SectionEntry(*_entry.values()), self.session.get_html(article_url)
             break
 
-    def _scrape_unit(self, entry_and_article):
+    def scrape_unit(self, entry_and_article):
         entry, article = entry_and_article
 
         text = article.cssselect("td > font.artbody")[1:]

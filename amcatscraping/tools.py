@@ -21,9 +21,8 @@ from collections import OrderedDict
 import logging
 import sys
 import re
-import time
 import argparse
-from datetime import datetime, date
+import datetime
 
 from html2text import HTML2Text
 from lxml import html, etree
@@ -91,88 +90,11 @@ def setup_logging():
             logger.addHandler(handler)
 
 
-def get_arguments(__first__=None, **variations):
-    """wrapper for argparse module
-    provide either one dict or different named dicts for different subparsers
-    sample usage:
-    get_arguments({
-        'integers' : {
-            'metavar' : 'N',
-            'type' : int,
-            'nargs' : '+',
-            'help' : 'an integer for the accumulator'},
-        '--sum' : {
-            'dest' : 'accumulate',
-            'action' : 'store_const',
-            'const' : sum,
-            'default' : max,
-            'help' : 'sum the integers (default: find the max)'}
-    })
-    """
-    assert bool(__first__) ^ bool(variations)
-
-    def addarguments(parser, _dict):
-        for args, options in _dict.items():
-            if not hasattr(args, '__iter__'):
-                args = (args,)
-            for arg in args:
-                parser.add_argument(arg, **options)
-
-    parser = argparse.ArgumentParser()
-    if __first__:
-        addarguments(parser, __first__)
-    elif variations:
-        subparsers = parser.add_subparsers(dest='__command__')
-        for cmd, args in variations.items():
-            parser_cmd = subparsers.add_parser(cmd)
-            addarguments(parser_cmd, args)
-    return vars(parser.parse_args())
-
-
-from importlib import import_module
-
-
-def run_scraper_and_log(classpath, arguments, db):
-    """
-    Shortcut to getting a scraper class, running it, and 
-    logging the results to the db
-    """
-    # Get the scraper class
-    modulename, classname = classpath.rsplit(".", 1)
-    module = import_module(modulename)
-    scraper = getattr(module, classname)
-    # Run the scraper
-    log.info("Running {}".format(classpath))
-    tstart = datetime.now()
-    try:
-        articles = scraper(**arguments).run()
-    except Exception as e:
-        articles = []
-        log.exception("running scraper failed")
-    else:
-        e = None
-    tfinish = datetime.now()
-
-    # Log the details to the db
-    details = {
-        'time_started': tstart,
-        'time_finished': tfinish,
-        'arguments': arguments,
-        'n_articles': len(articles),
-        'exception': e}
-    runs = db[classpath]['runs']
-    runs.append(details)
-    db.update(classpath, runs=runs)
-
-
 ### DATES ###
-
-def todate(d):
-    return date.fromordinal(d.toordinal())
-
-
-def todatetime(d):
-    return datetime.fromtimestamp(time.mktime(d.timetuple()))
+def to_date(date_or_datetime):
+    if isinstance(date_or_datetime, datetime.datetime):
+        return date_or_datetime.date()
+    return date_or_datetime
 
 
 class _DateFormat(object):
@@ -323,7 +245,7 @@ def read_date(string, lax=False, rejectPre1970=False, american=False):
 
         if not time:
             time = (0, 0, 0)
-        return datetime(*(date + time))
+        return datetime.datetime(*(date + time))
     except Exception:
         import traceback
 

@@ -1,6 +1,6 @@
 ###########################################################################
 # (C) Vrije Universiteit, Amsterdam (the Netherlands)            #
-#                                                                         #
+# #
 # This file is part of AmCAT - The Amsterdam Content Analysis Toolkit     #
 #                                                                         #
 # AmCAT is free software: you can redistribute it and/or modify it under  #
@@ -18,27 +18,17 @@
 ###########################################################################
 from __future__ import print_function
 
-from operator import itemgetter
+import datetime
 import sys
 import logging
-from datetime import timedelta
-from collections import OrderedDict
 import itertools
 
 from .httpsession import Session
-from .tools import todatetime, todate, get_arguments, read_date
-
+from .tools import to_date
 from amcatclient.amcatclient import AmcatAPI
 
-log = logging.getLogger(__name__)
 
-ARGLIST = OrderedDict((
-    ('project', {'type': int}),
-    ('articleset', {'type': int}),
-    (('api_host', 'api_user', 'api_password'), {}),
-    ('--log_errors', {'action': 'store_const', 'const': True}),
-    ('--batched', {'action': 'store_const', 'const': True})
-))
+log = logging.getLogger(__name__)
 
 
 def count_articles(articles):
@@ -47,94 +37,104 @@ def count_articles(articles):
 
 
 class Scraper(object):
-    def __init__(self, **kwargs):
-        self.options = kwargs or get_arguments(ARGLIST)
-        self.session = Session()  #http session
-        self.project_id = self.options["project"]
-        self.articleset_id = self.options["articleset"]
+    def __init__(self, project_id, articleset_id, batched=False, dry_run=False, api_host=None, api_user=None, api_password=None, **kwargs):
+        self.batched = batched
+        self.dry_run = dry_run
 
-    def save(self, articles):
-        if self.options.get("command") == "test":
-            log.info("Scraper returned %s articles (not saving due to --dry-run)", len(articles))
-            return enumerate(articles)
+        self.project_id = project_id
+        self.articleset_id = articleset_id
 
-        log.info("Saving..")
-        return self._save(
-            articles,
-            self.options['api_host'],
-            self.options['api_user'],
-            self.options['api_password']
-        )
+        self.api_host = api_host
+        self.api_user = api_user
+        self.api_password = api_password
 
-    def run_batches(self, batch_size=1000):
-        articles = []
-        log.info("Running scraper in batched mode..")
-        for a in self._scrape():
-            print(".", end="")
-            sys.stdout.flush()
-            articles.append(a)
-            size = count_articles(articles)
-            if size >= batch_size:
-                log.info("Accumulated {size} articles. Preprocessing / saving..".format(**locals()))
-                yield self.save(list(self._postprocess(articles)))
-                print("")
-                articles = []
-        yield self.save(list(self._postprocess(articles)))
+        self.session = Session()
 
-    def run(self, input=None):
-        if self.options["batched"]:
-            return list(itertools.chain.from_iterable(self.run_batches()))
-
-        log.info("Scraping articles...")
-        articles = []
-        for a in self._scrape():
-            articles.append(a)
-            print(".", end="")
-            sys.stdout.flush()
-        print("")
-
-        log.info("Found {} articles. Postprocessing...".format(count_articles(articles)))
-        return self.save(list(self._postprocess(articles)))
-
-    def _scrape(self):
+    def scrape(self):
         """Scrape the target resource and return a sequence of article dicts"""
         raise NotImplementedError()
 
-    def _postprocess(self, articles):
+    def _save(self, articles):
+        amcat_api = AmcatAPI(self.api_host, self.api_user, self.api_password)
+        articles = amcat_api.create_articles(
+            project=self.project_id,
+            articleset=self.articleset_id,
+            json_data=articles
+        )
+        return [article["id"] for article in articles]
+
+    def save(self, articles):
+        if self.dry_run:
+            log.info("Scraper returned %s articles (not saving due to --dry-run)", count_articles(articles))
+            return range(len(articles))
+
+        log.info("Saving {alen} articles..".format(alen=count_articles(articles)))
+        return self._save(articles)
+
+    def postprocess(self, articles):
         """Space to do something with the unsaved articles that the scraper provided"""
         return filter(None, articles)
 
-    def _save(self, articles, *auth):
-        api = AmcatAPI(*auth)
-        response = api.create_articles(self.project_id, self.articleset_id, json_data=articles)
-        ids = [article['id'] for article in response]
-        if not any(ids) and ids:
-            raise RuntimeError("None of the articles were saved.")
-        if not all(ids):
-            warning_msg = "Warning: Only {}/{} articles were saved."
-            log.warning(warning_msg.format(len(filter(None, ids)), len(ids)))
-        return filter(itemgetter("id"), response)
+    def run_batches(self, batch_size=1000):
+        articles = []
+        article_count = 0
+
+        if not batch_size:
+            log.info("Running scraper {self.__class__.__name__}..".format(**locals()))
+        else:
+            log.info("Running scraper {self.__class__.__name__} (batch size: {batch_size})".format(**locals()))
+
+        for a in self.scrape():
+            sys.stdout.write(".")
+            sys.stdout.flush()
+
+            articles.append(a)
+            size = count_articles(articles)
+
+            # Check if batch size is reached. If so: save articles, and proceed.
+            if batch_size and size >= batch_size:
+                log.info("Accumulated {size} articles. Preprocessing / saving..".format(**locals()))
+                yield self.save(list(self.postprocess(articles)))
+                articles = []
+                article_count += size
+
+        # Save articles not yet saved in loop
+        article_count += count_articles(articles)
+        log.info("Scraped a total of {article_count} articles.".format(**locals()))
+        yield self.save(list(self.postprocess(articles)))
+
+    def run(self):
+        batch_size = 1000 if self.batched else 0
+        articles = list(itertools.chain.from_iterable(self.run_batches(batch_size)))
+        log.info("Saved a total of {alen} articles.".format(alen=len(articles)))
+        return articles
 
 
 class UnitScraper(Scraper):
-    """
-    Scrapes the resource on a per-unit basis
-    children classes should overrride _get_units and _scrape_unit
-    """
+    """Scrapes the resource on a per-unit basis. Descendants should override
+    the methods get_units() and scrape_unit(). Basically, what it does is:
 
-    def _scrape(self):
-        for unit in self._get_units():
-            try:
-                unit = self._scrape_unit(unit)
-                if unit is not None:
-                    yield unit
-            except Exception as e:
-                if self.options['log_errors']:
-                    log.exception(e)
-                else:
-                    sys.stdout.write('x')
-                    sys.stdout.flush()
-                continue
+    def scrape(self):
+        for unit in self.get_units():
+            yield self.scrape_unit(unit)
+
+    """
+    def get_units(self):
+        return []
+
+    def scrape_unit(self, unit):
+        return None
+
+    def _scrape(self, unit):
+        try:
+            return self.scrape_unit(unit)
+        except Exception as e:
+            log.exception(e)
+
+    def scrape(self):
+        for article in itertools.imap(self._scrape, self.get_units()):
+            if article is not None:
+                yield article
 
 
 class DateRangeScraper(Scraper):
@@ -143,54 +143,52 @@ class DateRangeScraper(Scraper):
     Provides a first_date and last_date option which children classes can use
     to select data from their resource.
     """
-
-    def _get_arg_list(self):
-        args = super(DateRangeScraper, self)._get_arg_list()
-        args.append((('min_datetime', 'max_datetime'),
-                     {'type': lambda x: todatetime(read_date(x))}))
-        return args
-
-    def _get_dates(self, min_datetime, max_datetime):
-        for n in range((max_datetime - min_datetime).days + 1):
-            yield todate(min_datetime + timedelta(days=n))
-
-    def __init__(self, **kwargs):
+    def __init__(self, min_date, max_date, **kwargs):
         super(DateRangeScraper, self).__init__(**kwargs)
-        self.min_date = todate(self.options['min_datetime'])
-        self.max_date = todate(self.options['max_datetime'])
+
+        assert(isinstance(min_date, datetime.date))
+        assert(isinstance(max_date, datetime.date))
+        assert(not isinstance(min_date, datetime.datetime))
+        assert(not isinstance(max_date, datetime.datetime))
+
+        self.min_date = min_date
+        self.max_date = max_date
         self.dates = list(self._get_dates(self.min_date, self.max_date))
 
-    def _postprocess(self, articles):
-        articles = list(super(DateRangeScraper, self)._postprocess(articles))
+    def _get_dates(self, min_date, max_date):
+        for n in range((max_date - min_date).days + 1):
+            yield min_date + datetime.timedelta(days=n)
+
+    def postprocess(self, articles):
+        articles = list(super(DateRangeScraper, self).postprocess(articles))
         for a in articles:
-            assert self.min_date <= todate(a['date']) <= self.max_date
+            assert self.min_date <= to_date(a['date']) <= self.max_date
         return articles
 
 
-class LoginError(Exception):
-    """Exception for login failure"""
-    pass
+class ContinuousScraper(DateRangeScraper):
+    """Blocks until an article of with a date greater than max_datetime is reached.
+    min_datetime is ignored, but can be used to update articles. Continious scrapers
+    typically don't include comments, but require the user to run update() periodically."""
+    def scrape(self):
+        articles = super(ContinuousScraper, self).scrape()
+        return itertools.takewhile(lambda a: to_date(a["date"]) <= self.max_date, articles)
 
 
 class LoginMixin(object):
     """Logs in to the resource before scraping"""
+    def __init__(self, username, password, **kwargs):
+        super(LoginMixin, self).__init__(**kwargs)
+        self.username = username
+        self.password = password
 
-    def _get_arg_list(self):
-        args = super(LoginMixin, self)._get_arg_list()
-        args.append((('username', 'password'), {}))
-        return args
-
-    def _scrape(self, *args, **kwargs):
-        username = self.options['username']
-        password = self.options['password']
-
-        # Please ensure _login returns True on success
-        if not self._login(username, password):
+    def scrape(self, *args, **kwargs):
+        # Please ensure login returns True on success
+        if not self.login(self.username, self.password):
             raise ValueError("Login routine returned False. Are your credentials correct?")
+        return super(LoginMixin, self).scrape(*args, **kwargs)
 
-        return super(LoginMixin, self)._scrape(*args, **kwargs)
-
-    def _login(self, username, password):
+    def login(self, username, password):
         raise NotImplementedError()
 
 
@@ -213,14 +211,14 @@ class PropertyCheckMixin(object):
     'expected' means at least one article should have this property
     """
 
-    def _postprocess(self, articles):
-        articles = super(PropertyCheckMixin, self)._postprocess(articles)
+    def postprocess(self, articles):
+        articles = super(PropertyCheckMixin, self).postprocess(articles)
         self._add_defaults(articles)
         self._check_properties(articles)
         return articles
 
     def _add_defaults(self, articles):
-        self._props['defaults']['project'] = self.options['project']
+        self._props['defaults']['project'] = self.project_id
         self._props['defaults']['metastring'] = {}
 
         for prop, default in self._props['defaults'].items():
