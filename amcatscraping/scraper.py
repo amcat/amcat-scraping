@@ -18,6 +18,7 @@
 ###########################################################################
 from __future__ import print_function
 from collections import namedtuple
+import json
 
 import time
 import datetime
@@ -99,7 +100,10 @@ class Scraper(object):
 
     def postprocess(self, articles):
         """Space to do something with the unsaved articles that the scraper provided"""
-        return filter(None, articles)
+        for article in map(dict, filter(None, articles)):
+            if "metastring" in article:
+                article["metastring"] = json.dumps(article["metastring"])
+            yield article
 
     def _run(self, scrape_func):
         articles = []
