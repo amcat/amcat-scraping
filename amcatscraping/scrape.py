@@ -33,7 +33,7 @@ Options:
                    but may leave articlesets half-filled in case of errors.
   --batch-size=<n> If running in batched mode, this determines the batch size. For continuous
                    scrapers a low value is suitable for "real-time" purposes (default: 1000).
-
+  --update         Update comment threads of existing articles
 
 """
 import collections
@@ -119,8 +119,16 @@ def run_single(config, args, scraper_config, scraper_class):
         "batch_size": int(args.get("--batch-size", 1000))
     }
 
+    scraper = scraper_class(**opts)
+    method = "run_update" if args["--update"] else "run"
+
     try:
-        return scraper_class(**opts).run()
+        return getattr(scraper, method)()
+    except NotImplementedError:
+        if args["--update"]:
+            log.info("Updating not implemented for {scraper_class.__name__}".format(**locals()))
+        else:
+            raise
     except Exception as e:
         log.exception("Running scraper {scraper_class.__name__} resulted in an exception:".format(**locals()))
 

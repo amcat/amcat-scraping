@@ -17,12 +17,14 @@
 # License along with AmCAT.  If not, see <http://www.gnu.org/licenses/>.  #
 ###########################################################################
 from __future__ import print_function
+from collections import namedtuple
 
 import time
 import datetime
 import sys
 import logging
 import itertools
+import collections
 
 from .httpsession import Session
 from .tools import to_date
@@ -30,6 +32,23 @@ from amcatclient.amcatclient import AmcatAPI
 
 
 log = logging.getLogger(__name__)
+
+ArticleTree = namedtuple("ArticleTree", ["article", "children"])
+
+
+def _build_tree(article_children, articles, article_id):
+    children = [_build_tree(article_children, articles, a) for a in article_children[article_id]]
+    return ArticleTree(articles[article_id], children)
+
+
+def build_tree(articles):
+    articles = {a["id"]: a for a in articles}
+    article_children = collections.defaultdict(set)
+
+    for article in articles.values():
+        article_children[article["parent"]].add(article["id"])
+
+    return [_build_tree(article_children, articles, article_id) for article_id in article_children[None]]
 
 
 def count_articles(articles):
@@ -46,19 +65,24 @@ class Scraper(object):
         self.project_id = project_id
         self.articleset_id = articleset_id
 
-        self.api_host = api_host
-        self.api_user = api_user
-        self.api_password = api_password
-
         self.session = Session()
+        self.api = AmcatAPI(api_host, api_user, api_password)
 
     def scrape(self):
         """Scrape the target resource and return a sequence of article dicts"""
         raise NotImplementedError()
 
+    def update(self, article_tree):
+        """Update given articletree. Function should return an iterator with *NEW*
+        articles. Each given article has an 'id', which can be used for the parent
+        property on new articles.
+
+        @type article_tree: ArticleTree
+        @param article_tree: Existing articles"""
+        raise NotImplementedError()
+
     def _save(self, articles):
-        amcat_api = AmcatAPI(self.api_host, self.api_user, self.api_password)
-        articles = amcat_api.create_articles(
+        articles = self.api.create_articles(
             project=self.project_id,
             articleset=self.articleset_id,
             json_data=articles
@@ -77,16 +101,16 @@ class Scraper(object):
         """Space to do something with the unsaved articles that the scraper provided"""
         return filter(None, articles)
 
-    def run_batches(self, batch_size=None):
+    def _run(self, scrape_func):
         articles = []
         article_count = 0
 
-        if not batch_size:
+        if not self.batch_size:
             log.info("Running scraper {self.__class__.__name__}..".format(**locals()))
         else:
-            log.info("Running scraper {self.__class__.__name__} (batch size: {batch_size})".format(**locals()))
+            log.info("Running scraper {self.__class__.__name__} (batch size: {self.batch_size})".format(**locals()))
 
-        for a in self.scrape():
+        for a in scrape_func():
             sys.stdout.write(".")
             sys.stdout.flush()
 
@@ -94,7 +118,7 @@ class Scraper(object):
             size = count_articles(articles)
 
             # Check if batch size is reached. If so: save articles, and proceed.
-            if batch_size and size >= batch_size:
+            if self.batch_size and size >= self.batch_size:
                 log.info("Accumulated {size} articles. Preprocessing / saving..".format(**locals()))
                 yield self.save(list(self.postprocess(articles)))
                 articles = []
@@ -106,9 +130,13 @@ class Scraper(object):
         yield self.save(list(self.postprocess(articles)))
 
     def run(self):
-        articles = list(itertools.chain.from_iterable(self.run_batches(self.batch_size)))
+        articles = list(itertools.chain.from_iterable(self._run(self.scrape)))
         log.info("Saved a total of {alen} articles.".format(alen=len(articles)))
         return articles
+
+    def run_update(self):
+        error_msg = "This functionality is currently only available for DateRangeScrapers"
+        raise NotImplementedError(error_msg)
 
 
 class UnitScraper(Scraper):
@@ -144,6 +172,8 @@ class DateRangeScraper(Scraper):
     Provides a first_date and last_date option which children classes can use
     to select data from their resource.
     """
+    medium = None
+
     def __init__(self, min_date, max_date, **kwargs):
         super(DateRangeScraper, self).__init__(**kwargs)
 
@@ -154,7 +184,7 @@ class DateRangeScraper(Scraper):
 
         self.min_date = min_date
         self.max_date = max_date
-        self.dates = list(self._get_dates(self.min_date, self.max_date))
+        self.dates = tuple(self._get_dates(self.min_date, self.max_date))
 
     def _get_dates(self, min_date, max_date):
         for n in range((max_date - min_date).days + 1):
@@ -165,6 +195,53 @@ class DateRangeScraper(Scraper):
         for a in articles:
             assert self.min_date <= to_date(a['date']) <= self.max_date
         return articles
+
+    def _run_update_date(self, medium_id, date):
+        log.info("Running update for {date}, medium_id={medium_id}".format(**locals()))
+
+        # Fetch articles from database (including all properties) for one specific day
+        log.info("Fetching existing articles..")
+        end_date = date + datetime.timedelta(days=1)
+        articles = self.api.search(self.articleset_id, "", start_date=date, end_date=end_date, mediumid=medium_id)
+        articles = [article["id"] for article in articles]
+
+        if not articles:
+            # Ideally, api.list_articles wouldn't return any articles when filtering on an
+            # empty list, but it does so we have to check for it explicitly.
+            log.info("No existing articles found")
+        else:
+            articles = list(self.api.list_articles(self.project_id, self.articleset_id, pk=articles))
+            log.info("Fetched {} existing articles".format(len(articles)))
+
+            for article in build_tree(articles):
+                for new_article in self.update(article):
+                    yield new_article
+
+    def _run_update(self):
+        log.info("Trying to find medium id..")
+
+        if self.medium is None:
+            log.warning("Scraper has no medium name set. Skipping..")
+        else:
+            results = self.api.request("medium", name=self.medium)['results']
+
+            if not results:
+                error_msg = "Could not find medium with name {!r} in database."
+                raise ValueError(error_msg.format(self.medium))
+            elif len(results) > 1:
+                error_msg = "Found multiple mediums with name={!r}"
+                raise ValueError(error_msg.format(self.medium))
+
+            medium_id = results[0]["id"]
+            articles = (self._run_update_date(medium_id, date) for date in self.dates)
+            return itertools.chain.from_iterable(articles)
+
+        return []
+
+    def run_update(self):
+        """@raises: NotImplementedError if update functionality is not implemented"""
+        log.info("Running update for {self.__class__.__name__}".format(**locals()))
+        return list(self._run(self._run_update))
 
 
 class ContinuousScraper(DateRangeScraper):

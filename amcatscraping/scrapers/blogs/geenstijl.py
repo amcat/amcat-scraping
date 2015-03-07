@@ -38,6 +38,8 @@ def _parse_comment_footer(footer):
 
 
 class GeenstijlScraper(PropertyCheckMixin, UnitScraper, DateRangeScraper):
+    medium = "Geenstijl"
+
     def __init__(self, **kwargs):
         super(GeenstijlScraper, self).__init__(**kwargs)
         self.articles = defaultdict(set)
@@ -79,6 +81,10 @@ class GeenstijlScraper(PropertyCheckMixin, UnitScraper, DateRangeScraper):
             "url": url
         }
 
+    def _get_comments(self, headline, article_url, doc):
+        for comment in doc.cssselect("#comments article"):
+            yield self._parse_comment(comment, headline, article_url)
+
     def scrape_unit(self, date_and_article_url):
         date, article_url = date_and_article_url
         article_doc = self.session.get_html(article_url)
@@ -90,8 +96,6 @@ class GeenstijlScraper(PropertyCheckMixin, UnitScraper, DateRangeScraper):
         author = footer.text.rsplit("|", 1)[0].strip()
         timestamp = read_date(article_el.cssselect("time")[0].get("datetime"))
 
-        comments = article_doc.cssselect("#comments article")
-
         if not headline:
             return None
 
@@ -101,8 +105,20 @@ class GeenstijlScraper(PropertyCheckMixin, UnitScraper, DateRangeScraper):
             "text": text.strip() or ".",
             "author": author,
             "url": article_url,
-            "children": [self._parse_comment(c, headline, article_url) for c in comments]
+            "children": list(self._get_comments(headline, article_url, article_doc))
         }
+
+    def update(self, article_tree):
+        article = article_tree.article
+        article_doc = self.session.get_html(article["url"])
+        comments = self._get_comments(article["headline"], article["url"], article_doc)
+        urls = {comment.article["url"] for comment in article_tree.children}
+
+        for comment in comments:
+            if comment["url"] not in urls:
+                comment['parent'] = article["id"]
+                yield comment
+
 
     _props = {
         'defaults': {
