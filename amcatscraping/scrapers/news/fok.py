@@ -53,6 +53,8 @@ def parse_comment_date(date):
 
 
 class FOKScraper(PropertyCheckMixin, UnitScraper, DateRangeScraper):
+    medium = "FOK - Frontpage"
+
     def __init__(self, *args, **kwargs):
         super(FOKScraper, self).__init__(*args, **kwargs)
         self.session.cookies["allowcookies"] = "ACCEPTEER ALLE COOKIES"
@@ -92,6 +94,12 @@ class FOKScraper(PropertyCheckMixin, UnitScraper, DateRangeScraper):
 
     @memoize
     def _get_date(self, article_id):
+        if article_id > self.latest_id:
+            return None
+
+        if article_id < self.oldest_id:
+            raise ValueError("ID {} does not exist: too old.".format(article_id))
+
         log.info("Fetching {}".format(ARTILCE_URL.format(**locals())))
         doc = self.session.get_html(ARTILCE_URL.format(**locals()))
 
@@ -167,14 +175,19 @@ class FOKScraper(PropertyCheckMixin, UnitScraper, DateRangeScraper):
         article_id = self.get_first_id(first_date)
 
         # Consume pages which do not fall in date range
-        while self._get_date(article_id) < first_date:
+        date = self._get_date(article_id)
+        while date is not None and date < first_date:
             article_id += 1
 
         self._dump_id_cache()
 
         # Begin scraping!
-        while self._get_date(article_id) <= last_date:
-            yield article_id
+        date = self._get_date(article_id)
+        while date is not None and date <= last_date:
+            # Although it happens very rarely, FOK sometimes has non-ascending ids. If this
+            # happens, we'll do a linear search until we find an article of the correct date.
+            if date >= first_date:
+                yield article_id
             article_id += 1
 
     def get_comment_elements(self, page):
@@ -247,6 +260,17 @@ class FOKScraper(PropertyCheckMixin, UnitScraper, DateRangeScraper):
             },
             "children": list(self.get_comments(headline, url, section, doc))
         }
+
+    def update(self, article_tree):
+        article, children = article_tree
+        doc = self.session.get_html(article["url"])
+        comments = self.get_comments(article["headline"], article["url"], article["section"], doc)
+        urls = {comment.article["url"] for comment in children}
+
+        for comment in comments:
+            if comment["url"] not in urls:
+                comment["parent"] = article["id"]
+                yield comment
 
     _props = {
         'defaults': {
