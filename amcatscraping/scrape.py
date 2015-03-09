@@ -21,6 +21,7 @@
 Usage:
   scrape.py run [options] [<scraper>...]
   scrape.py list
+  scrape.py report [--email] [--day=<date>]
   scrape.py -h | --help
 
 Options:
@@ -28,7 +29,6 @@ Options:
   --from=<date>    Scrape articles from date (default: today)
   --to=<date>      Scrape articles up to and including date (default: today)
   --dry-run        Do not commit to database
-  --report         Send report to e-mailaddress after scraping
   --batched        Regularly save to database. This prevents scraping from using too much memory,
                    but may leave articlesets half-filled in case of errors.
   --batch-size=<n> If running in batched mode, this determines the batch size. For continuous
@@ -171,8 +171,8 @@ def run(config, args, scrapers):
     for label, narticles, log in _run(config, args, scrapers):
         logs[label] = (narticles, log)
 
-    if args["--report"]:
-        _send_email(config, logs)
+def report(config, args):
+    pass
 
 
 def get_connection_config(config):

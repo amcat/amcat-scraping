@@ -18,8 +18,12 @@
 ###########################################################################
 from __future__ import print_function
 from collections import namedtuple
-import json
+from itertools import takewhile
+from operator import itemgetter
 
+import json
+import os
+import errno
 import time
 import datetime
 import sys
@@ -28,7 +32,7 @@ import itertools
 import collections
 
 from .httpsession import Session
-from .tools import to_date
+from .tools import to_date, memoize
 from amcatclient.amcatclient import AmcatAPI
 
 
@@ -68,6 +72,10 @@ class Scraper(object):
 
         self.session = Session()
         self.api = AmcatAPI(api_host, api_user, api_password)
+        self.setup_session()
+
+    def setup_session(self):
+        pass
 
     def scrape(self):
         """Scrape the target resource and return a sequence of article dicts"""
@@ -246,6 +254,185 @@ class DateRangeScraper(Scraper):
         """@raises: NotImplementedError if update functionality is not implemented"""
         log.info("Running update for {self.__class__.__name__}".format(**locals()))
         return list(self._run(self._run_update))
+
+
+CACHE_DIR = "~/.cache"
+
+class DateNotFoundError(Exception):
+    pass
+
+
+class BinarySearchScraper(Scraper):
+    """Some websites don't have an archive which is easily orderable on date, but do have
+    ascending thread or article ids. This scraper takes advantage of that fact by performing
+    a binary search through these ids.
+    
+    Descendants should implement the following methods:
+
+      * get_latest()
+      * get_oldest()
+      * get_date(id)
+
+    You should then be able to call get_first_of_date(date).
+    
+    You should also make sure to call _dump_id_cache() after scraping to save the id cache
+    to disk. This scraper caches its id results across subsequent runs."""
+    cache_file = os.path.join(CACHE_DIR, "{self.__class__.__name__}_cache.json")
+
+    def __init__(self, *args, **kwargs):
+        super(BinarySearchScraper, self).__init__(*args, **kwargs)
+        cache_file = self.cache_file.format(**locals())
+
+        try:
+            os.makedirs(CACHE_DIR)
+        except OSError as exception:
+            if exception.errno != errno.EEXIST:
+                raise
+
+        try:
+            self.id_cache = json.load(open(cache_file))
+        except (IOError, ValueError):
+            self.id_cache = {}
+
+        dates, ids = zip(*dict(self.id_cache).items()) or [[], []]
+        dates = [d.date() for d in map(datetime.datetime.fromtimestamp, dates)]
+        self.id_cache = dict(zip(dates, ids))
+        
+        oldest_date, self.oldest_id = self.get_oldest()
+        latest_date, self.latest_id = self.get_latest()
+        self.id_cache[oldest_date] = self.oldest_id
+        self.id_cache[latest_date] = self.latest_id
+
+    def _dump_id_cache(self):
+        dates, ids = zip(*self.id_cache.items()) or [[], []]
+        dates = map(lambda d: int(time.mktime(d.timetuple())), dates)
+        json.dump(zip(dates, ids), open(self.cache_file, "w"))
+
+    def get_latest(self):
+        """@returns (datetime.date, id)"""
+        raise NotImplementedError()
+
+    def get_oldest(self):
+        """@returns (datetime.date, id)"""
+        raise NotImplementedError()
+
+    @memoize
+    def get_date(self, id):
+        """Get date for given id. Must return None if given id does not exist,
+        was deleted or otherwise invalid."""
+        raise NotImplementedError()
+
+    @memoize
+    def _get_date(self, id):
+        """
+        """
+        oldest_date, oldest_id= self.get_oldest()
+        latest_date, latest_id= self.get_latest()
+
+        if id > latest_id:
+            raise DateNotFoundError("{id} exceeds latest id".format(id=id))
+
+        if id < oldest_id:
+            raise DateNotFoundError("{id} smaller than oldest id".format(id=id))
+
+        date = self.get_date(id)
+        if date is None:
+            return self._get_date(id - 1)
+
+        self.id_cache[date] = id
+        return date
+
+    def _get_first_id_linear(self, date):
+        article_id = self.id_cache[date]
+        while date == self._get_date(article_id):
+            article_id -= 1
+        return article_id
+
+    def _get_first_id(self, date, left_date, right_date):
+        log.info("Looking for {date}. Left: {left_date}, right: {right_date}".format(**locals()))
+
+        if date == left_date:
+            return self._get_first_id_linear(left_date)
+
+        if date == right_date:
+            return self._get_first_id_linear(right_date)
+
+        right_id = self.id_cache[right_date]
+        left_id = self.id_cache[left_date]
+
+        if left_date == right_date or right_id - left_id == 1:
+            raise DateNotFoundError()
+
+        left_id = self.id_cache[left_date]
+        right_id = self.id_cache[right_date]
+        pivot_id = (left_id + right_id) // 2
+        pivot_date = self._get_date(pivot_id)
+
+        if pivot_date < date:
+            return self._get_first_id(date, pivot_date, right_date)
+        else:
+            return self._get_first_id(date, left_date, pivot_date)
+
+    def get_first_by_date(self, date):
+        """
+        @raises DateNotFoundError, if no unit could be found on 'date'
+        @returns id
+        """
+        # We first search our cache to minimize the calls made to the website we're scraping
+        id_cache = sorted(self.id_cache.items(), key=itemgetter(0))
+
+        # First determine left pivot..
+        left_date, left_id= self.get_oldest()
+        for cached_date, cached_id in id_cache:
+            if cached_date > date:
+                break
+
+            if cached_date > left_date:
+                left_id, left_date = cached_id, cached_date
+
+        # Right pivot..
+        right_date, right_id = self.get_latest()
+        for cached_date, cached_id in reversed(id_cache):
+            if cached_date < date:
+                break
+
+            if cached_date < right_date:
+                right_id, right_date = cached_id, cached_date
+
+        # Perform binary search for found interval
+        return self._get_first_id(date, left_date, right_date)
+
+
+class BinarySearchDateRangeScraper(DateRangeScraper, BinarySearchScraper):
+    """
+
+    """
+    def _get_units(self, article_id):
+        aids = xrange(article_id, self.get_latest()[1] + 1)
+        return itertools.imap(self.scrape_unit, aids)
+
+    def scrape(self):
+        article_id = None
+
+        for date in self.dates:
+            try:
+                article_id = self.get_first_by_date(date)
+                print(article_id)
+            except DateNotFoundError:
+                pass
+            else:
+                break
+
+        if article_id is None:
+            return []
+
+        articles = filter(None, self._get_units(article_id))
+        articles = filter(lambda a: to_date(a["date"] ) >= self.dates[0], articles)
+        articles = takewhile(lambda a: to_date(a["date"]) <= self.dates[-1], articles)
+        return articles
+
+    def scrape_unit(self, id):
+        raise NotImplementedError()
 
 
 class ContinuousScraper(DateRangeScraper):

@@ -1,5 +1,6 @@
 from operator import itemgetter
 
+import lxml.html
 import time
 import logging
 import datetime
@@ -7,7 +8,7 @@ import json
 import os
 import errno
 
-from amcatscraping.scraper import PropertyCheckMixin, UnitScraper, DateRangeScraper
+from amcatscraping.scraper import PropertyCheckMixin, UnitScraper, BinarySearchDateRangeScraper
 from amcatscraping.tools import read_date, memoize, html2text
 
 ARTILCE_URL = "http://frontpage.fok.nl/nieuws/{article_id}"
@@ -52,143 +53,37 @@ def parse_comment_date(date):
     return datetime.datetime(date.year, date.month, date.day, int(hour), int(minute))
 
 
-class FOKScraper(PropertyCheckMixin, UnitScraper, DateRangeScraper):
+class FOKScraper(PropertyCheckMixin, BinarySearchDateRangeScraper):
     medium = "FOK - Frontpage"
 
-    def __init__(self, *args, **kwargs):
-        super(FOKScraper, self).__init__(*args, **kwargs)
+    def setup_session(self):
         self.session.cookies["allowcookies"] = "ACCEPTEER ALLE COOKIES"
         self.session.cookies["allowallcookies"] = "1"
-        self.session.caching = True
 
-        first_link = self.session.get_html(FRONTPAGE_URL).cssselect("#main .indexPage li")[0]
-        first_link = first_link.cssselect("a")[0].get("href")
-        first_link = first_link[len(FRONTPAGE_URL):]
-
-        self.oldest_id = 134577
-        self.latest_id = int(first_link.split("/")[1])
-
-        # To not bombard FOK with needless requests each time, we cache
-        # known article ids to help us with binary search
-        try:
-            os.makedirs(CACHE_DIR)
-        except OSError as exception:
-            if exception.errno != errno.EEXIST:
-                raise
-
-        try:
-            self.id_cache = json.load(open(CACHE_FILE))
-        except (IOError, ValueError):
-            self.id_cache = {}
-
-        dates, ids = zip(*dict(self.id_cache).items()) or [[], []]
-        dates = [d.date() for d in map(datetime.datetime.fromtimestamp, dates)]
-        self.id_cache = dict(zip(dates, ids))
-        self.id_cache[datetime.date(1999, 9, 30)] = self.oldest_id
-        self.id_cache[self._get_date(self.latest_id)] = self.latest_id
-
-    def _dump_id_cache(self):
-        dates, ids = zip(*self.id_cache.items()) or [[], []]
-        dates = map(lambda d: int(time.mktime(d.timetuple())), dates)
-        json.dump(zip(dates, ids), open(CACHE_FILE, "w"))
+    def get_oldest(self):
+        return datetime.date(1999, 9, 30), 134577
 
     @memoize
-    def _get_date(self, article_id):
-        if article_id > self.latest_id:
-            return None
+    def get_latest(self):
+        first_link = self.session.get_html(FRONTPAGE_URL).cssselect("#main .indexPage li")
+        first_link = first_link[0].cssselect("a")[0].get("href")
+        first_link = first_link[len(FRONTPAGE_URL):]
+        return datetime.date.today(), int(first_link.split("/")[1])
 
-        if article_id < self.oldest_id:
-            raise ValueError("ID {} does not exist: too old.".format(article_id))
-
+    @memoize
+    def get_date(self, article_id):
         log.info("Fetching {}".format(ARTILCE_URL.format(**locals())))
         doc = self.session.get_html(ARTILCE_URL.format(**locals()))
 
         if not doc.cssselect("article"):
-            return self._get_date(article_id - 1)
+            return None
 
-        date = read_date(doc.cssselect("time")[0].get("datetime")).date()
-        self.id_cache[date] = article_id
-        return date
-
-    def _get_first_id_linear(self, date):
-        article_id = self.id_cache[date]
-        while date == self._get_date(article_id):
-            article_id -= 1
-        return article_id
-
-    def _get_first_id(self, date, left_date, right_date):
-        log.info("Looking for {date}. Left: {left_date}, right: {right_date}".format(**locals()))
-
-        if date == left_date:
-            return self._get_first_id_linear(left_date)
-
-        if date == right_date:
-            return self._get_first_id_linear(right_date)
-
-        if left_date == right_date or self.id_cache[right_date] - self.id_cache[left_date] == 1:
-            return self.id_cache[left_date]
-
-        left_id = self.id_cache[left_date]
-        right_id = self.id_cache[right_date]
-        pivot_id = (left_id + right_id) // 2
-        pivot_date = self._get_date(pivot_id)
-
-        if pivot_date < date:
-            return self._get_first_id(date, pivot_date, right_date)
-        else:
-            return self._get_first_id(date, left_date, pivot_date)
-
-    def get_first_id(self, date):
-        """Determine the ID of the first article seen on 'date'. If no article is
-        found on this day, the first article id before or after will be returned."""
-        id_cache = sorted(self.id_cache.items(), key=itemgetter(0))
-
-        # First determine left pivot..
-        left_id, left_date = self.oldest_id, datetime.date(1999, 9, 30)
-        for cached_date, cached_id in id_cache:
-            if cached_date > date:
-                break
-
-            if cached_date > left_date:
-                left_id, left_date = cached_id, cached_date
-
-        # Right pivot..
-        right_id, right_date = self.latest_id, datetime.datetime.now().date()
-        for cached_date, cached_id in reversed(id_cache):
-            if cached_date < date:
-                break
-
-            if cached_date < right_date:
-                right_id, right_date = cached_id, cached_date
-
-        # Binary search, here we go.
-        return self._get_first_id(date, left_date, right_date)
+        return read_date(doc.cssselect("time")[0].get("datetime")).date()
 
     def _get_dates(self, min_date, max_date):
         if min_date < datetime.date(1999, 9, 30):
             raise ValueError("FOK's oldest articles was posted on 1999-09-30")
         return super(FOKScraper, self)._get_dates(min_date, max_date)
-
-    def get_units(self):
-        first_date = list(self.dates)[0]
-        last_date = list(self.dates)[-1]
-        article_id = self.get_first_id(first_date)
-
-        # Consume pages which do not fall in date range
-        date = self._get_date(article_id)
-        while date is not None and date < first_date:
-            article_id += 1
-
-        self._dump_id_cache()
-
-        # Begin scraping!
-        date = self._get_date(article_id)
-        while date is not None and date <= last_date:
-            # Although it happens very rarely, FOK sometimes has non-ascending ids. If this
-            # happens, we'll do a linear search until we find an article of the correct date.
-            if date >= first_date:
-                yield article_id
-            article_id += 1
 
     def get_comment_elements(self, page):
         for comment in page.cssselect("#comments #commentThread > div[data-userid]"):
