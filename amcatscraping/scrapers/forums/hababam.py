@@ -153,12 +153,13 @@ class HababamScraper(BinarySearchDateRangeScraper, LoginMixin):
         title = doc.cssselect("#pagetitle .threadtitle a")[0].text.strip()
         article = self.parse_post(thread_id, title, doc, posts[0])
         article["headline"] = title
+        article["children"] = list(self._get_comments(thread_id, title))
         return article
 
     def _get_comments(self, thread_id, title, pagenr=1):
         doc = self.get_html(thread_id, pagenr)
 
-        for post in doc.cssselect("ol.posts > li"):
+        for post in doc.cssselect("ol.posts > li")[int(pagenr == 1):]:
             yield self.parse_post(thread_id, title, doc, post)
 
         if any(pn.get("rel") == "next" for pn in doc.cssselect("#pagination_top .prev_next a")):
