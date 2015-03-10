@@ -18,7 +18,6 @@
 ###########################################################################
 from __future__ import print_function
 from collections import namedtuple
-from itertools import takewhile
 from operator import itemgetter
 
 import json
@@ -429,9 +428,9 @@ class BinarySearchDateRangeScraper(DateRangeScraper, BinarySearchScraper):
         if article_id is None:
             return []
 
-        articles = filter(None, self._get_units(article_id))
-        articles = filter(lambda a: to_date(a["date"] ) >= self.dates[0], articles)
-        articles = takewhile(lambda a: to_date(a["date"]) <= self.dates[-1], articles)
+        articles = itertools.ifilter(None, self._get_units(article_id))
+        articles = itertools.ifilter(lambda a: to_date(a["date"]) >= self.dates[0], articles)
+        articles = itertools.takewhile(lambda a: to_date(a["date"]) <= self.dates[-1], articles)
         return articles
 
     def scrape_unit(self, id):
