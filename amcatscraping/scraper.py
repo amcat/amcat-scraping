@@ -106,12 +106,16 @@ class Scraper(object):
         log.info("Saving {alen} articles..".format(alen=count_articles(articles)))
         return self._save(articles)
 
+    def _postprocess_json(self, article):
+        if "metastring" in article:
+            article["metastring"] = json.dumps(article["metastring"])
+        article["children"] = map(self._postprocess_json, map(dict, article.get("children", ())))
+        return article
+
     def postprocess(self, articles):
         """Space to do something with the unsaved articles that the scraper provided"""
         for article in map(dict, filter(None, articles)):
-            if "metastring" in article:
-                article["metastring"] = json.dumps(article["metastring"])
-            yield article
+            yield self._postprocess_json(article)
 
     def _run(self, scrape_func):
         articles = []
@@ -417,7 +421,6 @@ class BinarySearchDateRangeScraper(DateRangeScraper, BinarySearchScraper):
         for date in self.dates:
             try:
                 article_id = self.get_first_by_date(date)
-                print(article_id)
             except DateNotFoundError:
                 pass
             else:
@@ -460,16 +463,16 @@ class ContinuousScraper(DateRangeScraper):
 class LoginMixin(object):
     """Logs in to the resource before scraping"""
     def __init__(self, username, password, **kwargs):
-        super(LoginMixin, self).__init__(**kwargs)
         self.username = username
         self.password = password
+        super(LoginMixin, self).__init__(**kwargs)
 
-    def scrape(self, *args, **kwargs):
-        # Please ensure login returns True on success
+    def setup_session(self):
+        super(LoginMixin, self).setup_session()
+
         if not self.login(self.username, self.password):
             raise ValueError("Login routine returned False. Are your credentials correct?")
-        return super(LoginMixin, self).scrape(*args, **kwargs)
-
+        
     def login(self, username, password):
         raise NotImplementedError()
 
