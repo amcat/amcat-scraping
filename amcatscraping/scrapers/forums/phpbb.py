@@ -193,6 +193,10 @@ class PHPBBScraper(BinarySearchDateRangeScraper):
 
         doc = self.get_html(thread_id)
         posts = doc.cssselect("ol.posts > li")
+
+        if not posts:
+            return None
+
         title = doc.cssselect("#pagetitle .threadtitle a")[0].text.strip()
         article = self.parse_post(thread_id, title, doc, posts[0])
         article["headline"] = title
