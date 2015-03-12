@@ -81,8 +81,14 @@ class PHPBBScraper(BinarySearchDateRangeScraper):
         links = filter(None, (a.get('href') for a in archive.cssselect("#content a")))
 
         new_ids = set()
-        for subarchive in itertools.imap(self.session.get_html, links):
-            url = subarchive.cssselect(".pagenumbers")[0].cssselect("a")[-1].get("href")
+        for url in links:
+            url = "{}-p-1.html".format(url[:-5])
+            subarchive = self.session.get_html(url)
+            pagenumbers = subarchive.cssselect(".pagenumbers")
+
+            if pagenumbers:
+                url = pagenumbers[0].cssselect("a")[-1].get("href")
+
             new_ids |= set(self._get_valid_ids(id_cache, *parse_subarchive_url(url)))
 
         ids = new_ids | id_cache
