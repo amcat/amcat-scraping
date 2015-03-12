@@ -16,14 +16,20 @@
 # You should have received a copy of the GNU Lesser General Public        #
 # License along with AmCAT.  If not, see <http://www.gnu.org/licenses/>.  #
 ###########################################################################
+from __future__ import print_function, unicode_literals
+
 from collections import defaultdict
 import datetime
+import logging
 
 from amcatscraping.scraper import UnitScraper, DateRangeScraper, PropertyCheckMixin
 from amcatscraping.tools import html2text, read_date
 
 
 ARCHIEF_URL = "http://www.geenstijl.nl/mt/archieven/maandelijks/%Y/%m/"
+
+
+log = logging.getLogger(__name__)
 
 
 def _parse_comment_footer(footer):
@@ -87,6 +93,7 @@ class GeenstijlScraper(PropertyCheckMixin, UnitScraper, DateRangeScraper):
 
     def scrape_unit(self, date_and_article_url):
         date, article_url = date_and_article_url
+        log.info("Fetching {}".format(article_url))
         article_doc = self.session.get_html(article_url)
 
         article_el = article_doc.cssselect("#content > article")[0]
