@@ -406,8 +406,8 @@ class BinarySearchDateRangeScraper(DateRangeScraper, BinarySearchScraper):
 
     """
     def _get_units(self, article_id):
-        aids = xrange(article_id, self.get_latest()[1] + 1)
-        return itertools.imap(self.scrape_unit, aids)
+        first_pos = self.valid_ids_pos[article_id]
+        return itertools.imap(self.scrape_unit, self.valid_ids[first_pos:])
 
     def scrape(self):
         article_id = None
