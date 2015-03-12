@@ -5,27 +5,8 @@
     <title></title>
 </head>
 <body>
-    <table>
-        <thead>
-            <tr>
-                <th>Scraper</th>
-                <th>Number of articles</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for scraper, narticles in scrapers %}
-            <tr>
-                <td>{{ scraper }}</td>
-                <td>{{ narticles }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-        <tfoot>
-            <tr>
-                <td>Total</td>
-                <td>{{ total }}</td>
-            </tr>
-        </tfoot>
-    </table>
+    <p>Scraper log for {{ today }}</p>
+    <pre>{{ table|safe }}</pre>
+    <p>You can view logs by running <code>scrape log &lt;uuid&gt;</code>.</p>
 </body>
 </html>

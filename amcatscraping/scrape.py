@@ -21,7 +21,8 @@
 Usage:
   scrape.py run [options] [<scraper>...]
   scrape.py list
-  scrape.py report [--email] [--day=<date>]
+  scrape.py report [--email] [--date=<date>]
+  scrape.py log <uuid>
   scrape.py -h | --help
 
 Options:
@@ -36,16 +37,24 @@ Options:
   --update         Update comment threads of existing articles
 
 """
+from __future__ import print_function
+
 import collections
 from StringIO import StringIO
 from email.utils import formatdate
+import glob
+from itertools import imap
+import json
 import logging
 import os.path
 import sys
 import jinja2
 import datetime
+import tabulate
+import uuid
 
 from django.core.mail import EmailMultiAlternatives, get_connection
+import errno
 
 import amcatscraping.tools
 from amcatscraping.tools import read_date, get_boolean, to_date
@@ -66,10 +75,14 @@ MODULE_PATH = os.path.abspath(os.path.join(*amcatscraping.__path__))
 ROOT_PATH = os.path.abspath(os.path.join(MODULE_PATH, ".."))
 DEFAULT_CONFIG_FILE = os.path.join(MODULE_PATH, "default.conf")
 USER_CONFIG_FILE = os.path.abspath(os.path.expanduser("~/.scrapers.conf"))
+LOG_DIR = os.path.expanduser("~/.cache/scraperlogs/")
+TODAY = datetime.date.today()
 
 SECTIONS = {"*", "store", "mail"}
 
 ScraperResult = collections.namedtuple("ScraperResult", ["name", "narticles", "log"])
+
+
 
 
 def get_scraper_class(scraper, relative_path):
@@ -167,12 +180,70 @@ def _run(config, args, scrapers):
 
 
 def run(config, args, scrapers):
+    """Run scrapers and write logs afterwards"""
     logs = collections.OrderedDict()
     for label, narticles, log in _run(config, args, scrapers):
-        logs[label] = (narticles, log)
+        logs[label] = (datetime.datetime.now(), narticles, log)
+
+    identifier = str(uuid.uuid4())
+    log_dir = os.path.join(LOG_DIR, TODAY.strftime("%Y-%m-%d"))
+    log_file = os.path.join(log_dir, identifier + ".json")
+
+    try:
+        os.makedirs(log_dir)
+    except OSError as exception:
+        if exception.errno != errno.EEXIST:
+            raise
+
+    for label, (timestamp, narticles, log) in logs.iteritems():
+        json.dump({
+            "narticles": narticles, "log": log, "label": label,
+            "timestamp": int(timestamp.strftime("%s")),
+            "update": args["--update"], "uuid": identifier
+        }, open(log_file, "w"))
+
+
+def get_logs(date):
+    log_dir = os.path.join(LOG_DIR, date.strftime("%Y-%m-%d"))
+    files = glob.glob(os.path.join(log_dir, "*.json"))
+    logs = imap(json.load, imap(open, files))
+    logs = sorted(logs, key=lambda l: (l['label'], l['timestamp']))
+
+    for log in logs:
+        log["timestamp"] = datetime.datetime.fromtimestamp(log["timestamp"]).isoformat()
+        log["update"] = "Yes" if log["update"] else "No"
+
+    return logs
+
 
 def report(config, args):
-    pass
+    date = args.get('--date')
+    date = TODAY if date is None else read_date(date).date()
+
+    headers = ["label", "timestamp", "narticles", "update", "uuid"]
+    table_data = [[log[h] for h in headers] for log in get_logs(date)]
+
+    if table_data:
+        print(tabulate.tabulate(table_data, headers=headers))
+        print("\nUse 'scrape log <uuid>' to view the logs of a particular run.")
+    else:
+        print("No logs found for {date}".format(date=date))
+        return
+
+    if args["--email"]:
+        print("Sending report above via email.. ", end="")
+        _send_email(config, headers, table_data)
+        print("OK.")
+
+def _log(config, args):
+    file = glob.glob(os.path.join(LOG_DIR, "*/{}.json".format(args["<uuid>"])))
+
+    assert(len(file) <= 1)
+
+    try:
+        print(json.load(open(file[0]))["log"].strip())
+    except IndexError:
+        print("No log found for {}".format(args["<uuid>"]))
 
 
 def get_connection_config(config):
@@ -189,9 +260,9 @@ def get_connection_config(config):
         }
 
 
-def _send_email(config, logs):
-    scrapers = sorted([(label, narticles) for (label, (narticles, _)) in logs.items()])
-    html_content = EMAIL_TEMPLATE.render(scrapers=scrapers, total=sum(dict(scrapers).values()))
+def _send_email(config, headers, table_data):
+    table_html = tabulate.tabulate(table_data, headers=headers)
+    html_content = EMAIL_TEMPLATE.render(table=table_html, today=TODAY)
     connection = get_connection(**get_connection_config(config))
 
     mail = EmailMultiAlternatives(
@@ -203,10 +274,6 @@ def _send_email(config, logs):
     )
 
     mail.attach_alternative(html_content, 'text/html')
-
-    for (label, (_, log)) in logs.items():
-        mail.attach(filename="%s_log.txt" % label, mimetype="text/plain", content=log)
-
     mail.send()
 
 
@@ -249,6 +316,11 @@ def main(config, args):
     if args["run"]:
         return run(config, args, args["<scraper>"])
 
+    if args["report"]:
+        return report(config, args)
+
+    if args["log"]:
+        return _log(config, args)
 
 if __name__ == '__main__':
     from docopt import docopt

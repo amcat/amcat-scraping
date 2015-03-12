@@ -25,5 +25,6 @@ setup(
         "django",
         "docopt",
         "lxml",
+        "tabulate",
     ],
 )
