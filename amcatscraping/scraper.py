@@ -343,7 +343,6 @@ class BinarySearchScraper(Scraper):
     def _get_first_id_linear(self, date):
         id = self.id_cache[date]
         while date == self._get_date(id):
-            print(id)
             id = self.valid_ids[self.valid_ids_pos[id] - 1]
         return id
 
