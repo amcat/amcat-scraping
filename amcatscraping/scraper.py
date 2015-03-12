@@ -119,10 +119,10 @@ class Scraper(object):
         articles = []
         article_count = 0
 
-        if not self.batch_size:
-            log.info("Running scraper {self.__class__.__name__}..".format(**locals()))
-        else:
+        if self.batched:
             log.info("Running scraper {self.__class__.__name__} (batch size: {self.batch_size})".format(**locals()))
+        else:
+            log.info("Running scraper {self.__class__.__name__}..".format(**locals()))
 
         for a in scrape_func():
             sys.stdout.write(".")
@@ -132,7 +132,7 @@ class Scraper(object):
             size = count_articles(articles)
 
             # Check if batch size is reached. If so: save articles, and proceed.
-            if self.batch_size and size >= self.batch_size:
+            if self.batched and size >= self.batch_size:
                 log.info("Accumulated {size} articles. Preprocessing / saving..".format(**locals()))
                 yield self.save(list(self.postprocess(articles)))
                 articles = []
@@ -300,7 +300,7 @@ class BinarySearchScraper(Scraper):
     def _dump_id_cache(self):
         dates, ids = zip(*self.id_cache.items()) or [[], []]
         dates = map(lambda d: int(time.mktime(d.timetuple())), dates)
-        json.dump(zip(dates, ids), open(self.cache_file, "w"))
+        json.dump(zip(dates, ids), open(self.cache_file.format(**locals()), "w"))
 
     def get_valid_ids(self):
         """Returns ordered list of valid ids"""

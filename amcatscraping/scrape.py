@@ -116,7 +116,7 @@ def run_single(config, args, scraper_config, scraper_class):
         "max_date": max_date,
         "batched": args["--batched"],
         "dry_run": args["--dry-run"],
-        "batch_size": int(args.get("--batch-size", 1000))
+        "batch_size": int(args.get("--batch-size") or 1000)
     }
 
     scraper = scraper_class(**opts)
