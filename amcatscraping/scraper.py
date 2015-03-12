@@ -341,10 +341,11 @@ class BinarySearchScraper(Scraper):
         return date
 
     def _get_first_id_linear(self, date):
-        id = self.id_cache[date]
+        prev_id = id = self.id_cache[date]
         while date == self._get_date(id):
-            id = self.valid_ids[self.valid_ids_pos[id] - 1]
-        return id
+            prev_id = id
+            id = self.valid_ids[self.valid_ids_pos[prev_id] - 1]
+        return prev_id
 
     def _get_first_id(self, date, left_date, right_date):
         log.info("Looking for {date}. Left: {left_date}, right: {right_date}".format(**locals()))
