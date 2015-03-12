@@ -68,7 +68,8 @@ class FOKScraper(PropertyCheckMixin, BinarySearchDateRangeScraper):
         first_link = self.session.get_html(FRONTPAGE_URL).cssselect("#main .indexPage li")
         first_link = first_link[0].cssselect("a")[0].get("href")
         first_link = first_link[len(FRONTPAGE_URL):]
-        return datetime.date.today(), int(first_link.split("/")[1])
+        article_id = int(first_link.split("/")[1])
+        return self.get_date(article_id), article_id
 
     @memoize
     def get_date(self, article_id):
@@ -99,14 +100,20 @@ class FOKScraper(PropertyCheckMixin, BinarySearchDateRangeScraper):
             except IndexError:
                 pass
             else:
-                next_page = self.session.get_html(next_page.get("href"))
+                url = next_page.get("href")
+                log.info("Fetching {}".format(url))
+                next_page = self.session.get_html(url)
                 for comment in self.get_comment_elements(next_page):
                     yield comment
 
     def get_comments(self, headline, url, section, page):
         for comment in self.get_comment_elements(page):
             top_bar = comment.cssselect(".commentTopBar")[0]
-            author = top_bar.cssselect(".author a")[0].text.strip()
+
+            author = top_bar.cssselect(".author a")[0].text
+            if author is None:
+                author = "[deleted user]"
+
             text = html2text(comment.cssselect(".commentContent")[0])
             comment_id = comment.get("id")
             user_id = comment.get("data-userid")
@@ -129,6 +136,7 @@ class FOKScraper(PropertyCheckMixin, BinarySearchDateRangeScraper):
 
     def scrape_unit(self, article_id):
         url = ARTILCE_URL.format(**locals())
+        log.info("Fetching {}".format(url))
         doc = self.session.get_html(url)
         article = doc.cssselect("article")
 
@@ -158,6 +166,7 @@ class FOKScraper(PropertyCheckMixin, BinarySearchDateRangeScraper):
 
     def update(self, article_tree):
         article, children = article_tree
+        log.info("Fetching {}".format(article["url"]))
         doc = self.session.get_html(article["url"])
         comments = self.get_comments(article["headline"], article["url"], article["section"], doc)
         urls = {comment.article["url"] for comment in children}
