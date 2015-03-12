@@ -1,6 +1,6 @@
 ###########################################################################
 # (C) Vrije Universiteit, Amsterdam (the Netherlands)                     #
-# #
+#                                                                         #
 # This file is part of AmCAT - The Amsterdam Content Analysis Toolkit     #
 #                                                                         #
 # AmCAT is free software: you can redistribute it and/or modify it under  #
@@ -16,15 +16,14 @@
 # You should have received a copy of the GNU Lesser General Public        #
 # License along with AmCAT.  If not, see <http://www.gnu.org/licenses/>.  #
 ###########################################################################
-
 import datetime
-
 from amcatscraping.scrapers.forums.phpbb import PHPBBScraper
 
 
-class HababamScraper(PHPBBScraper):
-    medium = "hababam"
-    domain = "forums.hababam.nl"
+class MarokkoScraper(PHPBBScraper):
+    medium = "marokko.nl"
+    domain = "forums.marokko.nl"
 
     def get_oldest(self):
-        return datetime.date(2005, 4, 3), 2
+        return datetime.date(2002, 2, 12), 1998
+

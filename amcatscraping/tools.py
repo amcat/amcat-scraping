@@ -19,10 +19,12 @@
 from collections import OrderedDict
 
 import logging
+import os
 import sys
 import re
-import argparse
 import datetime
+import errno
+import json
 
 from html2text import HTML2Text
 from lxml import html, etree
@@ -285,3 +287,19 @@ class LimitedSizeDict(OrderedDict):
         if self.size_limit is not None:
             while len(self) > self.size_limit:
                 self.popitem(last=False)
+
+
+def open_json_cache(path, default):
+    dir_name = os.path.dirname(path)
+
+    try:
+        os.makedirs(dir_name)
+    except OSError as exception:
+        if exception.errno != errno.EEXIST:
+            raise
+
+    try:
+        return json.load(open(path))
+    except (IOError, ValueError):
+        return default
+

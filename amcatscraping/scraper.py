@@ -22,7 +22,6 @@ from operator import itemgetter
 
 import json
 import os
-import errno
 import time
 import datetime
 import sys
@@ -31,7 +30,7 @@ import itertools
 import collections
 
 from .httpsession import Session
-from .tools import to_date, memoize
+from .tools import to_date, memoize, open_json_cache
 from amcatclient.amcatclient import AmcatAPI
 
 
@@ -78,7 +77,7 @@ class Scraper(object):
 
     def scrape(self):
         """Scrape the target resource and return a sequence of article dicts"""
-        raise NotImplementedError()
+        raise NotImplementedError("scrape() not implemented.")
 
     def update(self, article_tree):
         """Update given articletree. Function should return an iterator with *NEW*
@@ -87,7 +86,7 @@ class Scraper(object):
 
         @type article_tree: ArticleTree
         @param article_tree: Existing articles"""
-        raise NotImplementedError()
+        raise NotImplementedError("update() not implemented.")
 
     def _save(self, articles):
         articles = self.api.create_articles(
@@ -259,7 +258,7 @@ class DateRangeScraper(Scraper):
         return list(self._run(self._run_update))
 
 
-CACHE_DIR = "~/.cache"
+CACHE_DIR = os.path.expanduser("~/.cache")
 
 class DateNotFoundError(Exception):
     pass
@@ -285,17 +284,7 @@ class BinarySearchScraper(Scraper):
     def __init__(self, *args, **kwargs):
         super(BinarySearchScraper, self).__init__(*args, **kwargs)
         cache_file = self.cache_file.format(**locals())
-
-        try:
-            os.makedirs(CACHE_DIR)
-        except OSError as exception:
-            if exception.errno != errno.EEXIST:
-                raise
-
-        try:
-            self.id_cache = json.load(open(cache_file))
-        except (IOError, ValueError):
-            self.id_cache = {}
+        self.id_cache = open_json_cache(cache_file, default={})
 
         dates, ids = zip(*dict(self.id_cache).items()) or [[], []]
         dates = [d.date() for d in map(datetime.datetime.fromtimestamp, dates)]
@@ -305,32 +294,38 @@ class BinarySearchScraper(Scraper):
         latest_date, self.latest_id = self.get_latest()
         self.id_cache[oldest_date] = self.oldest_id
         self.id_cache[latest_date] = self.latest_id
+        self.valid_ids = self.get_valid_ids()
+        self.valid_ids_pos = {id: pos for pos, id in enumerate(self.valid_ids)}
 
     def _dump_id_cache(self):
         dates, ids = zip(*self.id_cache.items()) or [[], []]
         dates = map(lambda d: int(time.mktime(d.timetuple())), dates)
         json.dump(zip(dates, ids), open(self.cache_file, "w"))
 
+    def get_valid_ids(self):
+        """Returns ordered list of valid ids"""
+        return list(range(self.oldest_id, self.latest_id + 1))
+
     def get_latest(self):
         """@returns (datetime.date, id)"""
-        raise NotImplementedError()
+        raise NotImplementedError("get_latest() not implemented.")
 
     def get_oldest(self):
         """@returns (datetime.date, id)"""
-        raise NotImplementedError()
+        raise NotImplementedError("get_oldest() not implemented.")
 
     @memoize
     def get_date(self, id):
         """Get date for given id. Must return None if given id does not exist,
         was deleted or otherwise invalid."""
-        raise NotImplementedError()
+        raise NotImplementedError("get_date() not implemented.")
 
     @memoize
     def _get_date(self, id):
         """
         """
-        oldest_date, oldest_id= self.get_oldest()
-        latest_date, latest_id= self.get_latest()
+        oldest_date, oldest_id = self.get_oldest()
+        latest_date, latest_id = self.get_latest()
 
         if id > latest_id:
             raise DateNotFoundError("{id} exceeds latest id".format(id=id))
@@ -346,10 +341,11 @@ class BinarySearchScraper(Scraper):
         return date
 
     def _get_first_id_linear(self, date):
-        article_id = self.id_cache[date]
-        while date == self._get_date(article_id):
-            article_id -= 1
-        return article_id
+        id = self.id_cache[date]
+        while date == self._get_date(id):
+            print(id)
+            id = self.valid_ids[self.valid_ids_pos[id] - 1]
+        return id
 
     def _get_first_id(self, date, left_date, right_date):
         log.info("Looking for {date}. Left: {left_date}, right: {right_date}".format(**locals()))
@@ -361,15 +357,15 @@ class BinarySearchScraper(Scraper):
             return self._get_first_id_linear(right_date)
 
         right_id = self.id_cache[right_date]
+        right_pos = self.valid_ids_pos[right_id]
         left_id = self.id_cache[left_date]
+        left_pos = self.valid_ids_pos[left_id]
 
-        if left_date == right_date or right_id - left_id == 1:
+        if left_date == right_date or right_pos - left_pos == 1:
             raise DateNotFoundError()
 
-        left_id = self.id_cache[left_date]
-        right_id = self.id_cache[right_date]
-        pivot_id = (left_id + right_id) // 2
-        pivot_date = self._get_date(pivot_id)
+        pivot_pos = (left_pos + right_pos) // 2
+        pivot_date = self._get_date(self.valid_ids[pivot_pos])
 
         if pivot_date < date:
             return self._get_first_id(date, pivot_date, right_date)
@@ -385,7 +381,7 @@ class BinarySearchScraper(Scraper):
         id_cache = sorted(self.id_cache.items(), key=itemgetter(0))
 
         # First determine left pivot..
-        left_date, left_id= self.get_oldest()
+        left_date, left_id = self.get_oldest()
         for cached_date, cached_id in id_cache:
             if cached_date > date:
                 break
@@ -428,13 +424,15 @@ class BinarySearchDateRangeScraper(DateRangeScraper, BinarySearchScraper):
         if article_id is None:
             return []
 
+        self._dump_id_cache()
+
         articles = itertools.ifilter(None, self._get_units(article_id))
         articles = itertools.ifilter(lambda a: to_date(a["date"]) >= self.dates[0], articles)
         articles = itertools.takewhile(lambda a: to_date(a["date"]) <= self.dates[-1], articles)
         return articles
 
     def scrape_unit(self, id):
-        raise NotImplementedError()
+        raise NotImplementedError("scrape_unit() not implemented.")
 
 
 class ContinuousScraper(DateRangeScraper):
@@ -473,7 +471,7 @@ class LoginMixin(object):
             raise ValueError("Login routine returned False. Are your credentials correct?")
         
     def login(self, username, password):
-        raise NotImplementedError()
+        raise NotImplementedError("login() not implemented.")
 
 
 class PropertyCheckMixin(object):
