@@ -30,5 +30,6 @@ setup(
         "docopt",
         "lxml",
         "tabulate",
+        "feedparser"
     ],
 )
