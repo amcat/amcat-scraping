@@ -82,7 +82,6 @@ class PHPBBScraper(BinarySearchDateRangeScraper):
 
         new_ids = set()
         for url in links:
-            break
             url = "{}-p-1.html".format(url[:-5])
             subarchive = self.session.get_html(url)
             pagenumbers = subarchive.cssselect(".pagenumbers")
