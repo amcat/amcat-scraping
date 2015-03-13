@@ -216,7 +216,7 @@ class DateRangeScraper(Scraper):
         # Fetch articles from database (including all properties) for one specific day
         log.info("Fetching existing articles..")
         end_date = date + datetime.timedelta(days=1)
-        articles = self.api.search(self.articleset_id, "", start_date=date, end_date=end_date, mediumid=medium_id)
+        articles = self.api.search(self.articleset_id, None, start_date=date, end_date=end_date, mediumid=medium_id)
         articles = [article["id"] for article in articles]
 
         if not articles:
@@ -237,7 +237,7 @@ class DateRangeScraper(Scraper):
         if self.medium is None:
             log.warning("Scraper has no medium name set. Skipping..")
         else:
-            results = self.api.request("medium", name=self.medium, q="*")['results']
+            results = self.api.request("medium", name=self.medium)['results']
 
             if not results:
                 error_msg = "Could not find medium with name {!r} in database."
