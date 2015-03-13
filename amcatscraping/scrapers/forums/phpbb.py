@@ -244,7 +244,7 @@ class PHPBBScraper(BinarySearchDateRangeScraper):
         urls = map(itemgetter("url"), articles)
         thread_id = articles[0]["metastring"]["thread_id"]
 
-        for article in self.get_comments(thread_id, articles[0]["headline"]):
+        for article in self.get_comments(thread_id):
             if article["url"] not in urls:
                 article["parent"] = articles[0]["id"]
                 yield article
