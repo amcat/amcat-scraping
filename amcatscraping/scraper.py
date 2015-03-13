@@ -237,7 +237,7 @@ class DateRangeScraper(Scraper):
         if self.medium is None:
             log.warning("Scraper has no medium name set. Skipping..")
         else:
-            results = self.api.request("medium", name=self.medium)['results']
+            results = self.api.request("medium", name=self.medium, q="*")['results']
 
             if not results:
                 error_msg = "Could not find medium with name {!r} in database."
