@@ -20,12 +20,13 @@ import os
 import json
 import datetime
 import logging
+import lxml.html
 from operator import attrgetter, itemgetter
 from urlparse import urljoin
 import re
 
-from amcatscraping.scraper import BinarySearchDateRangeScraper, CACHE_DIR
-from amcatscraping.tools import read_date, memoize, html2text, open_json_cache
+from amcatscraping.scraper import BinarySearchDateRangeScraper, CACHE_DIR, LoginMixin
+from amcatscraping.tools import read_date, memoize, html2text, open_json_cache, parse_form
 from lxml.etree import XMLSyntaxError, SerialisationError
 
 
@@ -33,6 +34,7 @@ log = logging.getLogger(__name__)
 
 
 PHPBB_URL = "http://{self.domain}/showthread.php?t={thread_id}&page={pagenr}"
+PHPBB_LOGIN_URL = "http://{self.domain}/login.php?do=login"
 PHPBB_ARCHIVE_URL = "http://{self.domain}/archive/index.php"
 PHPBB_SUBARCHIVE_URL = PHPBB_ARCHIVE_URL + "/f-{archive_id}-{title}-p-{pagenr}.html"
 PHPBB_SUBARCHIVE_RE = re.compile("f-(?P<id>\d+)-(?P<title>[a-z0-9-]*)-p-(?P<pagenr>\d+).html")
@@ -52,10 +54,26 @@ def parse_thread_url(url):
     return int(thread_id), title
 
 
-class PHPBBScraper(BinarySearchDateRangeScraper):
+class PHPBBScraper(LoginMixin, BinarySearchDateRangeScraper):
     medium = None
     domain = "forums.example.com"
     valid_ids_cache_file = os.path.join(CACHE_DIR, "{self.__class__.__name__}_valid_ids_cache.json")
+
+    def login(self, username, password):
+        if not username or not password:
+            return True
+
+        frontpage = self.session.get_html("http://{self.domain}".format(self=self))
+        login_form = frontpage.cssselect("#navbar_loginform")[0]
+        form_data = parse_form(login_form)
+        form_data["vb_login_username"] = username
+        form_data["vb_login_password"] = password
+
+        login_url = PHPBB_LOGIN_URL.format(self=self)
+        response = self.session.post(login_url, data=form_data)
+        response = lxml.html.fromstring(response.content)
+        info_bar = response.cssselect(".standard_error")[0]
+        return "Je wordt doorgeschakeld" in lxml.html.tostring(info_bar)
 
     def _get_valid_ids(self, known_ids, archive_id, title, pagenr):
         url = PHPBB_SUBARCHIVE_URL.format(**locals())
