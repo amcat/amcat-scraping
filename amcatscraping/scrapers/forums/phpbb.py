@@ -20,14 +20,13 @@ import os
 import json
 import datetime
 import logging
-import itertools
 from operator import attrgetter, itemgetter
 from urlparse import urljoin
 import re
 
 from amcatscraping.scraper import BinarySearchDateRangeScraper, CACHE_DIR
 from amcatscraping.tools import read_date, memoize, html2text, open_json_cache
-from lxml.etree import XMLSyntaxError
+from lxml.etree import XMLSyntaxError, SerialisationError
 
 
 log = logging.getLogger(__name__)
@@ -152,7 +151,12 @@ class PHPBBScraper(BinarySearchDateRangeScraper):
         post_count = post.cssselect(".posthead .postcounter")[0].text.strip("#")
         base_url = PHPBB_URL.format(self=self, thread_id=thread_id, pagenr=1)
         url = "{base_url}#{post_id}".format(**locals())
-        text = html2text(post.cssselect(".postbody .content")[0]).strip()
+
+        try:
+            text = html2text(post.cssselect(".postbody .content")[0]).strip()
+        except SerialisationError:
+            log.exception("ERROR: Posts contains invalid characters.")
+            text = "[PARSE ERROR]"
 
         sections = doc.cssselect("#breadcrumb .navbit > a")[1:]
         sections = [s.text_content().strip() for s in sections]
