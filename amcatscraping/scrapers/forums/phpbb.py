@@ -37,7 +37,7 @@ PHPBB_ARCHIVE_URL = "http://{self.domain}/archive/index.php"
 PHPBB_SUBARCHIVE_URL = PHPBB_ARCHIVE_URL + "/f-{archive_id}-{title}-p-{pagenr}.html"
 PHPBB_SUBARCHIVE_RE = re.compile("f-(?P<id>\d+)-(?P<title>[a-z0-9-]*)-p-(?P<pagenr>\d+).html")
 PHPBB_THREAD_URL_RE = re.compile("t-(?P<thread_id>\d+)-(?P<title>[a-z0-9-]*).html")
-PHPBB_RESULTS_RE = re.compile("Resultaten (?P<from>\d+) tot (?P<to>\d+) van (?P<total>\d+)")
+PHPBB_RESULTS_RE = re.compile("(Resultaten )?(?P<from>\d+) tot (?P<to>\d+) van (?P<total>\d+)")
 
 
 def parse_subarchive_url(url):
