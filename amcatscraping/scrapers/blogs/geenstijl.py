@@ -96,12 +96,17 @@ class GeenstijlScraper(PropertyCheckMixin, UnitScraper, DateRangeScraper):
         log.info("Fetching {}".format(article_url))
         article_doc = self.session.get_html(article_url)
 
-        article_el = article_doc.cssselect("#content > article")[0]
-        headline = article_el.cssselect("h1")[0].text
-        text = html2text(article_el.cssselect("p"))
-        footer = article_el.cssselect("footer")[0]
+        article_el = article_doc.cssselect("#content > article")
+
+        if not article_el:
+            log.error("Could not find article on {article_url}".format(**locals()))
+            return None
+
+        headline = article_el[0].cssselect("h1")[0].text
+        text = html2text(article_el[0].cssselect("p"))
+        footer = article_el[0].cssselect("footer")[0]
         author = footer.text.rsplit("|", 1)[0].strip()
-        timestamp = read_date(article_el.cssselect("time")[0].get("datetime"))
+        timestamp = read_date(article_el[0].cssselect("time")[0].get("datetime"))
 
         if not headline:
             return None
