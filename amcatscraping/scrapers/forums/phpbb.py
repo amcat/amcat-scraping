@@ -36,8 +36,9 @@ log = logging.getLogger(__name__)
 PHPBB_URL = "http://{self.domain}/showthread.php?t={thread_id}&page={pagenr}"
 PHPBB_ARCHIVE_URL = "http://{self.domain}/archive/index.php"
 PHPBB_SUBARCHIVE_URL = PHPBB_ARCHIVE_URL + "/f-{archive_id}-{title}-p-{pagenr}.html"
-PHPBB_SUBARCHIVE_RE = re.compile("f-(?P<id>[0-9]+)-(?P<title>[a-z0-9-]*)-p-(?P<pagenr>[0-9]+).html")
-PHPBB_THREAD_URL_RE = re.compile("t-(?P<thread_id>[0-9]+)-(?P<title>[a-z0-9-]*).html")
+PHPBB_SUBARCHIVE_RE = re.compile("f-(?P<id>\d+)-(?P<title>[a-z0-9-]*)-p-(?P<pagenr>\d+).html")
+PHPBB_THREAD_URL_RE = re.compile("t-(?P<thread_id>\d+)-(?P<title>[a-z0-9-]*).html")
+PHPBB_RESULTS_RE = re.compile("Resultaten (?P<from>\d+) tot (?P<to>\d+) van (?P<total>\d+)")
 
 
 def parse_subarchive_url(url):
@@ -187,6 +188,9 @@ class PHPBBScraper(BinarySearchDateRangeScraper):
             }
         }
 
+    def _get_title(self, doc):
+        return doc.cssselect("#pagetitle .threadtitle a")[0].text.strip()
+
     def scrape_unit(self, thread_id):
         if not self._exists(thread_id):
             return None
@@ -197,20 +201,34 @@ class PHPBBScraper(BinarySearchDateRangeScraper):
         if not posts:
             return None
 
-        title = doc.cssselect("#pagetitle .threadtitle a")[0].text.strip()
-        article = self.parse_post(thread_id, title, doc, posts[0])
-        article["headline"] = title
-        article["children"] = list(self._get_comments(thread_id, title))
+        article = self.parse_post(thread_id, self._get_title(doc), doc, posts[0])
+        article["children"] = list(self.get_comments(thread_id))
+        article["headline"] = self._get_title(doc)
         return article
 
-    def _get_comments(self, thread_id, title, pagenr=1):
+    def _get_comments(self, thread_id, title, pagenr):
         doc = self.get_html(thread_id, pagenr)
 
         for post in doc.cssselect("ol.posts > li")[int(pagenr == 1):]:
             yield self.parse_post(thread_id, title, doc, post)
 
-        if any(pn.get("rel") == "next" for pn in doc.cssselect("#pagination_top .prev_next a")):
-            for post in self._get_comments(thread_id, title, pagenr+1):
+    def get_comments(self, thread_id):
+        doc = self.get_html(thread_id, 1)
+        title = self._get_title(doc)
+
+        # Determine pagenumbers
+        pagestats = doc.cssselect("#postpagestats_above")[0].text.strip()
+        from_, to, total = map(int, PHPBB_RESULTS_RE.match(pagestats).groups())
+
+        # When phpbb says "resultaten 1 tot 15" they say results 1 up to 15 (that is, non-
+        # inclusive). What they actually mean is: results 1 up to and including 15. But what
+        # the hell, it's only the most popular PHP forum software in existence, running on
+        # a massive amount of nodes.. why bother to be correct?
+        page_size = (to - from_) + 1
+        pages = (total // page_size) + int(bool(total % page_size))
+
+        for pagenr in range(1, pages+1):
+            for post in self._get_comments(thread_id, title, pagenr):
                 yield post
 
     def update(self, article_tree):
@@ -220,10 +238,9 @@ class PHPBBScraper(BinarySearchDateRangeScraper):
             article["metastring"] = json.loads(article["metastring"])
 
         urls = map(itemgetter("url"), articles)
-        pagenr = max(map(itemgetter("pagenr"), articles))
         thread_id = articles[0]["metastring"]["thread_id"]
 
-        for article in self._get_comments(thread_id, articles[0]["headline"], pagenr):
+        for article in self.get_comments(thread_id, articles[0]["headline"]):
             if article["url"] not in urls:
                 article["parent"] = articles[0]["id"]
                 yield article
