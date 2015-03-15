@@ -144,7 +144,12 @@ class FOKScraper(PropertyCheckMixin, BinarySearchDateRangeScraper):
         if not article:
             return None
 
-        article[0].cssselect("footer")[0].drop_tree()
+        try:
+            article[0].cssselect("footer")[0].drop_tree()
+        except IndexError:
+            # Footer did not exist in the first place.
+            pass
+
         author = article[0].cssselect(".by span.mainFont")[0].text.strip()
         headline = article[0].cssselect("h1")[0].text.strip()
         date = read_date(article[0].cssselect("time")[0].get("datetime"))
