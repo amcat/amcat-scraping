@@ -217,7 +217,12 @@ class PHPBBScraper(LoginMixin, BinarySearchDateRangeScraper):
         if not self._exists(thread_id):
             return None
 
-        doc = self.get_html(thread_id)
+        try:
+            doc = self.get_html(thread_id)
+        except XMLSyntaxError as e:
+            log.exception("Parsing thread with id {thread_id} failed.".format(**locals()))
+            return None
+
         posts = doc.cssselect("ol.posts > li")
 
         if not posts:
@@ -229,10 +234,13 @@ class PHPBBScraper(LoginMixin, BinarySearchDateRangeScraper):
         return article
 
     def _get_comments(self, thread_id, title, pagenr):
-        doc = self.get_html(thread_id, pagenr)
-
-        for post in doc.cssselect("ol.posts > li")[int(pagenr == 1):]:
-            yield self.parse_post(thread_id, title, doc, post)
+        try:
+            doc = self.get_html(thread_id, pagenr)
+        except XMLSyntaxError as e:
+            log.exception("Parsing parse {pagenr} of thread {thread_id} failed.".format(**locals()))
+        else:
+            for post in doc.cssselect("ol.posts > li")[int(pagenr == 1):]:
+                yield self.parse_post(thread_id, title, doc, post)
 
     def get_comments(self, thread_id):
         doc = self.get_html(thread_id, 1)
