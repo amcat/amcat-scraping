@@ -20,7 +20,7 @@
 """Class to deal with http browsing"""
 import lxml.html
 import requests
-from amcatscraping.tools import memoize
+import time
 
 
 class Session(requests.Session):
@@ -38,7 +38,12 @@ class Session(requests.Session):
             content = content.decode(self.encoding)
         return lxml.html.fromstring(content, base_url=link)
 
-    def get(self, link, **kwargs):
-        return super(Session, self).get(link.strip(), **kwargs)
-
+    def get(self, link, tries=3, **kwargs):
+        try:
+            return super(Session, self).get(link.strip(), **kwargs)
+        except Exception:
+            if tries == 1:
+                raise
+            time.sleep(2)
+            return self.get(link, tries=tries - 1, **kwargs)
 
