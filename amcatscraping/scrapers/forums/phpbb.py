@@ -167,6 +167,10 @@ class PHPBBScraper(LoginMixin, BinarySearchDateRangeScraper):
             if not post.cssselect(".userinfo"):
                 post.drop_tree()
 
+        # Remove deleted posts
+        for post in doc.cssselect(".postbitdeleted"):
+            post.drop_tree()
+
         return doc
 
     def parse_post(self, thread_id, title, doc, post):
