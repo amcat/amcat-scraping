@@ -41,6 +41,11 @@ PHPBB_SUBARCHIVE_RE = re.compile("f-(?P<id>\d+)-(?P<title>[a-z0-9-]*)-p-(?P<page
 PHPBB_THREAD_URL_RE = re.compile("t-(?P<thread_id>\d+)-(?P<title>[a-z0-9-]*).html")
 PHPBB_RESULTS_RE = re.compile("(?:Resultaten )?(?P<from>\d+) tot (?P<to>\d+) van (?P<total>\d+)")
 
+LOGIN_OK_MESSAGES = [
+    "Je wordt doorgeschakeld",
+    "Bedankt voor het inloggen"
+]
+
 
 def parse_subarchive_url(url):
     url = url.rsplit("/", 1)[1]
@@ -73,7 +78,9 @@ class PHPBBScraper(LoginMixin, BinarySearchDateRangeScraper):
         response = self.session.post(login_url, data=form_data)
         response = lxml.html.fromstring(response.content)
         info_bar = response.cssselect(".standard_error")[0]
-        return "Je wordt doorgeschakeld" in lxml.html.tostring(info_bar)
+
+        raw_html = lxml.html.tostring(info_bar).lower()
+        return any(msg.lower() in raw_html for msg in LOGIN_OK_MESSAGES)
 
     def _get_valid_ids(self, known_ids, archive_id, title, pagenr):
         url = PHPBB_SUBARCHIVE_URL.format(**locals())
