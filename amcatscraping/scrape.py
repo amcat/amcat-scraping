@@ -80,9 +80,7 @@ TODAY = datetime.date.today()
 
 SECTIONS = {"*", "store", "mail"}
 
-ScraperResult = collections.namedtuple("ScraperResult", ["name", "narticles", "log"])
-
-
+ScraperResult = collections.namedtuple("ScraperResult", ["name", "narticles", "failed", "log"])
 
 
 def get_scraper_class(scraper, relative_path):
@@ -136,16 +134,16 @@ def run_single(config, args, scraper_config, scraper_class):
     method = "run_update" if args["--update"] else "run"
 
     try:
-        return getattr(scraper, method)()
+        return list(getattr(scraper, method)()), False
     except NotImplementedError:
         if args["--update"]:
             log.info("Updating not implemented for {scraper_class.__name__}".format(**locals()))
         else:
-            raise
+            log.exception("Running scraper {scraper_class.__name__} resulted in an exception:".format(**locals()))
     except Exception as e:
         log.exception("Running scraper {scraper_class.__name__} resulted in an exception:".format(**locals()))
 
-    return []
+    return [], True
 
 
 def _run(config, args, scrapers):
@@ -165,25 +163,23 @@ def _run(config, args, scrapers):
 
     root_logger = logging.getLogger(amcatscraping.scraper.__name__)
     for label, scraper in scrapers.items():
-        articles = []  # HACK :-(
         log_buffer = StringIO()
         log_handler = logging.StreamHandler(log_buffer)
         root_logger.addHandler(log_handler)
 
-        try:
-            scraper_class = get_scraper_class(scraper, scraper["class"])
-            articles.append(run_single(config, args, scraper, scraper_class))
-        finally:
-            root_logger.removeHandler(log_handler)
-            narticles = len(articles.pop()) if articles else 0
-            yield ScraperResult(label, narticles, log_buffer.getvalue())
+        scraper_class = get_scraper_class(scraper, scraper["class"])
+        articles, failed = run_single(config, args, scraper, scraper_class)
+
+        root_logger.removeHandler(log_handler)
+        narticles = len(articles.pop()) if articles else 0
+        yield ScraperResult(label, narticles, failed, log_buffer.getvalue())
 
 
 def run(config, args, scrapers):
     """Run scrapers and write logs afterwards"""
     logs = collections.OrderedDict()
-    for label, narticles, log in _run(config, args, scrapers):
-        logs[label] = (datetime.datetime.now(), narticles, log)
+    for label, narticles, failed, log in _run(config, args, scrapers):
+        logs[label] = (datetime.datetime.now(), narticles, failed, log)
 
     identifier = str(uuid.uuid4())
     log_dir = os.path.join(LOG_DIR, TODAY.strftime("%Y-%m-%d"))
@@ -195,12 +191,19 @@ def run(config, args, scrapers):
         if exception.errno != errno.EEXIST:
             raise
 
-    for label, (timestamp, narticles, log) in logs.iteritems():
+    for label, (timestamp, narticles, failed, log) in logs.iteritems():
         json.dump({
             "narticles": narticles, "log": log, "label": label,
             "timestamp": int(timestamp.strftime("%s")),
-            "update": args["--update"], "uuid": identifier
+            "update": args["--update"], "uuid": identifier,
+            "failed": failed
         }, open(log_file, "w"))
+
+
+def _bool_to_str(val):
+    if val is None:
+        return ""
+    return "Yes" if val else "No"
 
 
 def get_logs(date):
@@ -211,7 +214,8 @@ def get_logs(date):
 
     for log in logs:
         log["timestamp"] = datetime.datetime.fromtimestamp(log["timestamp"]).isoformat()
-        log["update"] = "Yes" if log["update"] else "No"
+        log["update"] = _bool_to_str(log.get("update"))
+        log["failed"] = _bool_to_str(log.get("failed"))
 
     return logs
 
@@ -220,7 +224,7 @@ def report(config, args):
     date = args.get('--date')
     date = TODAY if date is None else read_date(date).date()
 
-    headers = ["label", "timestamp", "narticles", "update", "uuid"]
+    headers = ["label", "timestamp", "narticles", "update", "failed", "uuid"]
     table_data = [[log[h] for h in headers] for log in get_logs(date)]
 
     if table_data:
