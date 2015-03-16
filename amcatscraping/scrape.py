@@ -171,8 +171,7 @@ def _run(config, args, scrapers):
         articles, failed = run_single(config, args, scraper, scraper_class)
 
         root_logger.removeHandler(log_handler)
-        narticles = len(articles.pop()) if articles else 0
-        yield ScraperResult(label, narticles, failed, log_buffer.getvalue())
+        yield ScraperResult(label, len(articles), failed, log_buffer.getvalue())
 
 
 def run(config, args, scrapers):
