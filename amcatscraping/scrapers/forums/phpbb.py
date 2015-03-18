@@ -222,7 +222,9 @@ class PHPBBScraper(LoginMixin, BinarySearchDateRangeScraper):
         }
 
     def _get_title(self, doc):
-        return doc.cssselect("#pagetitle .threadtitle a")[0].text.strip()
+        # Deleted posts don't have a title.
+        thread_title = doc.cssselect("#pagetitle .threadtitle a")[0].text
+        return "[EMPTY TITLE]" if not thread_title else thread_title.strip()
 
     def scrape_unit(self, thread_id):
         if not self._exists(thread_id):
@@ -237,6 +239,9 @@ class PHPBBScraper(LoginMixin, BinarySearchDateRangeScraper):
         posts = doc.cssselect("ol.posts > li")
 
         if not posts:
+            return None
+
+        if not self._get_title(doc):
             return None
 
         article = self.parse_post(thread_id, self._get_title(doc), doc, posts[0])
