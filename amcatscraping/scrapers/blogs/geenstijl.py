@@ -28,6 +28,11 @@ from amcatscraping.tools import html2text, read_date
 
 ARCHIEF_URL = "http://www.geenstijl.nl/mt/archieven/maandelijks/%Y/%m/"
 
+# These urls are deaud.
+IGNORE_URLS = {
+    "http://www.geenstijl.nl/mt/archieven/2012/10/man_flasht_mes_op_groest.html",
+}
+
 
 log = logging.getLogger(__name__)
 
@@ -59,7 +64,8 @@ class GeenstijlScraper(PropertyCheckMixin, UnitScraper, DateRangeScraper):
                 self._get_archive(date)
 
             for article_url in self.articles[day_string]:
-                yield date, article_url
+                if article_url not in IGNORE_URLS:
+                    yield date, article_url
 
     def _get_archive(self, date):
         """Fill article-link cache with all articles written in the same month as 'date'"""
