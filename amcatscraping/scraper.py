@@ -31,7 +31,7 @@ import collections
 
 from .httpsession import Session
 from .tools import to_date, memoize, open_json_cache
-from amcatclient.amcatclient import AmcatAPI
+from amcatclient.amcatclient import AmcatAPI, APIError
 
 
 log = logging.getLogger(__name__)
@@ -96,13 +96,21 @@ class Scraper(object):
         )
         return [article["id"] for article in articles]
 
-    def save(self, articles):
+    def save(self, articles, tries=3):
         if self.dry_run:
             log.info("Scraper returned %s articles (not saving due to --dry-run)", count_articles(articles))
             return range(len(articles))
 
         log.info("Saving {alen} articles..".format(alen=count_articles(articles)))
-        return self._save(articles)
+
+        try:
+            return self._save(articles)
+        except APIError:
+            if tries <= 1:
+                raise
+            log.info("Failed saving.. retrying in 5 seconds")
+            time.sleep(5)
+            self.save(articles, tries=tries-1)
 
     def _postprocess_json(self, article):
         if "metastring" in article:
