@@ -83,7 +83,6 @@ class FinancieelDagbladScraper(LoginMixin, PropertyCheckMixin, UnitScraper, Date
                 for article_url in set(self._get_articles(entry)):
                     _entry = collections.OrderedDict(entry._asdict(), url=article_url)
                     yield SectionEntry(*_entry.values()), self.session.get_html(article_url)
-            break
 
     def scrape_unit(self, entry_and_article):
         entry, article = entry_and_article
