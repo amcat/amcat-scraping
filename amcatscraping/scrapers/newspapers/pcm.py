@@ -58,14 +58,14 @@ class PCMScraper(LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper):
     domain = None
 
     def __init__(self, *args, **kwargs):
-        super(PCMScraper, self).__init__(*args, **kwargs)
-
         self.ticket_url = None
         self.client_id = uuid4()
         self.headers = {
             'DSMessagingVersion':  1,
             'DSId': 'nil'
         }
+
+        super(PCMScraper, self).__init__(*args, **kwargs)
 
 
     def login(self, username, password):
