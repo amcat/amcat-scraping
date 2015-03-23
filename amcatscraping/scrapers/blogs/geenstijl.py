@@ -31,6 +31,7 @@ ARCHIEF_URL = "http://www.geenstijl.nl/mt/archieven/maandelijks/%Y/%m/"
 # These urls are deaud.
 IGNORE_URLS = {
     "http://www.geenstijl.nl/mt/archieven/2012/10/man_flasht_mes_op_groest.html",
+    "http://www.geenstijl.nl/mt/archieven/2014/02/bord_op_schoot.html"
 }
 
 
