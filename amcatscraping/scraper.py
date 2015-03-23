@@ -108,8 +108,11 @@ class Scraper(object):
         except APIError:
             if tries <= 1:
                 raise
-            log.info("Failed saving.. retrying in 5 seconds")
-            time.sleep(5)
+
+            sleep = max(3 - tries, 0) * 60 + 15
+            log.info("Failed saving.. retrying in {} seconds".format(sleep))
+            time.sleep(sleep)
+
             self.save(articles, tries=tries-1)
 
     def _postprocess_json(self, article):
