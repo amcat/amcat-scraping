@@ -151,7 +151,13 @@ class FOKScraper(PropertyCheckMixin, BinarySearchDateRangeScraper):
             pass
 
         author = article[0].cssselect(".by span.mainFont")[0].text.strip()
-        headline = article[0].cssselect("h1")[0].text.strip()
+        headline = article[0].cssselect("h1")[0].text
+
+        if headline is None:
+            headline = "[NO HEADLINE]"
+        else:
+            headline = headline.strip()
+
         date = read_date(article[0].cssselect("time")[0].get("datetime"))
         section = doc.cssselect("#crumbs li")[-1].cssselect("a")[0].text.strip()
         text = html2text(article[0].cssselect("p")).strip()
