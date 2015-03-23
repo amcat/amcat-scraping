@@ -19,6 +19,7 @@
 
 import datetime
 import base64
+import urlparse
 import uuid
 from urllib import quote
 
@@ -35,6 +36,7 @@ from amcatscraping.tools import parse_form
 LOGINURL = "https://caps.{domain}/service/login?service=http%3A%2F%2Fkrant.{domain}%2F%3Fpaper%3D{paper_id}%26zone%3D{regio_code}"
 AUTHURL = "https://caps.{domain}/service/validate?service="
 SAVEURL = "http://krant.%(domain)s/ipaper-online/saveLoginHistory?zone=%(regio_code)s&pubId=%(main_id)s&method=CAPS&paperId=%(paper_id)s&login=%(username)s"
+TICKET = "SSO_{self.paper_id}:{ticket_url.scheme}://{ticket_url.netloc}/@{ticket}"
 
 # AMF API page
 AMFURL = "http://krant.{domain}/ipaper-online/blaze/amf"
@@ -58,7 +60,6 @@ class PCMScraper(LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper):
     domain = None
 
     def __init__(self, *args, **kwargs):
-        self.ticket_url = None
         self.client_id = uuid4()
         self.headers = {
             'DSMessagingVersion':  1,
@@ -90,9 +91,10 @@ class PCMScraper(LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper):
         login_page = self.session.post(url, data=form)
 
         # Resolve ticket_url and save it
-        self.ticket_url = login_page.url
+        ticket_url = urlparse.urlparse(login_page.url)
+        ticket_url_params = dict(urlparse.parse_qsl(ticket_url.query))
         
-        if 'ticket' not in self.ticket_url:
+        if 'ticket' not in ticket_url_params:
             return False
 
         # Handshake server
@@ -103,16 +105,9 @@ class PCMScraper(LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper):
 
         self.headers.update(res.body.headers)
 
-
         # Send AMF Auth message to server
-        ticket = "TICKET_%s:%s%s" % (
-            self.paper_id,
-            AUTHURL.format(domain=self.domain),
-            quote(self.ticket_url, '&')
-        )
-
-        ticket = ticket.replace('ticket%3D', 'ticket=')
-        ticket = ticket.replace('&zone', '%26zone')
+        ticket = ticket_url_params['ticket']
+        ticket = TICKET.format(**locals())
 
         com = self.create_message(messaging.CommandMessage, operation=8)
         com.destination = 'auth'
@@ -243,8 +238,6 @@ class PCMScraper(LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper):
 
         env = self.create_envelope(self.create_request(rmsg))
         resp = self.apiget(env).bodies[0][1]
-
-        print(resp)
 
         for spread in resp.body.body['spreads']:
             for page in [spread.get(p) for p in ('leftPage', 'rightPage')]:
