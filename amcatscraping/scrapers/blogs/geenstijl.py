@@ -111,7 +111,14 @@ class GeenstijlScraper(PropertyCheckMixin, UnitScraper, DateRangeScraper):
 
         headline = article_el[0].cssselect("h1")[0].text
         text = html2text(article_el[0].cssselect("p"))
-        footer = article_el[0].cssselect("footer")[0]
+
+        try:
+            footer = article_el[0].cssselect("footer")[0]
+        except IndexError as e:
+            # Contains <embed> tag which is not closed gracefully :-(
+            log.exception(e)
+            return None
+
         author = footer.text.rsplit("|", 1)[0].strip()
         timestamp = read_date(article_el[0].cssselect("time")[0].get("datetime"))
 
