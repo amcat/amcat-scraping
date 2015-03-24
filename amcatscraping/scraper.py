@@ -129,7 +129,7 @@ class Scraper(object):
             else:
                 log.info("Reauth OK.")
 
-            self.save(articles, tries=tries-1, timeout=timeout + 120)
+            return self.save(articles, tries=tries-1, timeout=timeout + 120)
 
     def _postprocess_json(self, article):
         if "metastring" in article:
