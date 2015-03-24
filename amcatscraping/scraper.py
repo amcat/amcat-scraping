@@ -68,9 +68,16 @@ class Scraper(object):
         self.project_id = project_id
         self.articleset_id = articleset_id
 
+        self.api_host = api_host
+        self.api_user = api_user
+        self.api_password = api_password
+
         self.session = Session()
-        self.api = AmcatAPI(api_host, api_user, api_password)
+        self.api = self._api_auth()
         self.setup_session()
+
+    def _api_auth(self):
+        return AmcatAPI(self.api_host, self.api_user, self.api_password)
 
     def setup_session(self):
         pass
@@ -96,24 +103,33 @@ class Scraper(object):
         )
         return [article["id"] for article in articles]
 
-    def save(self, articles, tries=3):
+    def save(self, articles, tries=5, timeout=15):
         if self.dry_run:
             log.info("Scraper returned %s articles (not saving due to --dry-run)", count_articles(articles))
             return range(len(articles))
 
         log.info("Saving {alen} articles..".format(alen=count_articles(articles)))
 
+        # AmCAT API is really unstable :-(.
         try:
             return self._save(articles)
         except APIError:
             if tries <= 1:
                 raise
 
-            sleep = max(3 - tries, 0) * 60 + 15
-            log.info("Failed saving.. retrying in {} seconds".format(sleep))
-            time.sleep(sleep)
+            log.info("Failed saving.. retrying in {} seconds".format(timeout))
+            time.sleep(timeout)
 
-            self.save(articles, tries=tries-1)
+            log.info("Trying reauth..")
+            try:
+                self.api = self._api_auth()
+            except Exception:
+                log.info("Reauth failed.. retry saving in {} seconds".format(timeout))
+                time.sleep(timeout)
+            else:
+                log.info("Reauth OK.")
+
+            self.save(articles, tries=tries-1, timeout=timeout + 120)
 
     def _postprocess_json(self, article):
         if "metastring" in article:
