@@ -43,6 +43,8 @@ def parse_comment_date(date):
         date = datetime.date.today()
     elif day == "gisteren":
         date = datetime.date.today() - datetime.timedelta(days=1)
+    elif day == "eergisteren":
+        date = datetime.date.today() - datetime.timedelta(days=2)
     elif day in DAYS:
         today = datetime.date.today()
         date = today - get_diff(today, day)
