@@ -30,10 +30,8 @@ Options:
   --from=<date>    Scrape articles from date (default: today)
   --to=<date>      Scrape articles up to and including date (default: today)
   --dry-run        Do not commit to database
-  --batched        Regularly save to database. This prevents scraping from using too much memory,
-                   but may leave articlesets half-filled in case of errors.
   --batch-size=<n> If running in batched mode, this determines the batch size. For continuous
-                   scrapers a low value is suitable for "real-time" purposes (default: 1000).
+                   scrapers a low value is suitable for "real-time" purposes (default: 100).
   --update         Update comment threads of existing articles
 
 """
@@ -78,7 +76,7 @@ USER_CONFIG_FILE = os.path.abspath(os.path.expanduser("~/.scrapers.conf"))
 LOG_DIR = os.path.expanduser("~/.cache/scraperlogs/")
 TODAY = datetime.date.today()
 
-SECTIONS = {"*", "store", "mail"}
+SECTIONS = {"*", "store", "mail", "logging"}
 
 ScraperResult = collections.namedtuple("ScraperResult", ["name", "narticles", "failed", "log"])
 
@@ -125,9 +123,8 @@ def run_single(config, args, scraper_config, scraper_class):
         "log_errors": True,
         "min_date": min_date,
         "max_date": max_date,
-        "batched": args["--batched"],
         "dry_run": args["--dry-run"],
-        "batch_size": int(args.get("--batch-size") or 1000)
+        "batch_size": int(args.get("--batch-size") or 100)
     }
 
     scraper = scraper_class(**opts)
