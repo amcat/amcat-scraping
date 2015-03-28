@@ -21,6 +21,7 @@ from html2text import html2text
 import lxml.html
 from urlparse import urljoin
 
+from amcatscraping.article import Article
 from amcatscraping.tools import setup_logging, parse_form
 from amcatscraping.scraper import (LoginMixin, PropertyCheckMixin,
                                    UnitScraper, DateRangeScraper)
@@ -28,7 +29,8 @@ from amcatscraping.scraper import (LoginMixin, PropertyCheckMixin,
 
 LOGIN_URL = "https://fd.nl/login"
 DIGIKRANT_BASE_URL = "http://fd.nl/digikrant"
-DIGIKRANT_URL = "http://digikrant.fd.nl/%Y%m%d/public/"
+DIGIKRANT_URL = "http://digikrant-archief.fd.nl/vw/edition.do?dp=FD&date=%Y%m%d"
+#DIGIKRANT_URL = "http://digikrant.fd.nl/%Y%m%d/public/"
 
 SectionEntry = collections.namedtuple("SectionEntry", ["section", "subsection", "pagenr", "date", "url"])
 
@@ -64,6 +66,9 @@ class FinancieelDagbladScraper(LoginMixin, PropertyCheckMixin, UnitScraper, Date
         # Sections are defined in javascript, like so:
         # sectionTable.add('Katern 3', 'Outlook', '1', '/pages/07001/FD-07-001-20150207');
         frontpage = self.session.get(date.strftime(DIGIKRANT_URL)).content
+
+        print(frontpage)
+
         for section in self._get_section_table(frontpage.split("\n")):
             section_tuple = section.lstrip("sectionTable.add(").rstrip(");").replace("'", "")
             section, subsection, pagenr, url = section_tuple.split(", ")
@@ -103,7 +108,7 @@ class FinancieelDagbladScraper(LoginMixin, PropertyCheckMixin, UnitScraper, Date
         article_properties.update(entry._asdict())
 
         if article_properties["text"].strip():
-            return article_properties
+            return Article(article_properties)
 
     _props = {
         'defaults': {

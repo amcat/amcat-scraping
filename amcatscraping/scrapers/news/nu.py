@@ -19,6 +19,7 @@
 import json
 import requests
 import feedparser
+from amcatscraping.article import Article
 
 from amcatscraping.scraper import UnitScraper, ContinuousScraper
 from amcatscraping.tools import read_date, html2text
@@ -72,7 +73,7 @@ def get_comments(session, link, offset=1):
         })
 
         comment["metastring"]["tags"] = tags
-        yield comment
+        yield Article(comment)
 
         latest_comment_nr = comment["metastring"]["comment_nr"]
 
@@ -118,7 +119,7 @@ class NuScraper(ContinuousScraper, UnitScraper):
 
         article_properties = self.get_article_properties(feed_properties["url"])
         article_properties = dict(feed_properties, **dict(article_properties))
-        return article_properties
+        return Article(article_properties)
 
     def update(self, article_tree):
         article, children = article_tree
@@ -138,6 +139,6 @@ class NuScraper(ContinuousScraper, UnitScraper):
 
         if int(nujij_button.cssselect(".counter")[0].text.strip()):
             for comment in get_comments(self.session, nujij_url):
-                if comment["metastring"]["comment_nr"] not in comment_nrs:
-                    comment.update(medium)
+                if comment.properties["metastring"]["comment_nr"] not in comment_nrs:
+                    comment.properties.update(medium)
                     yield comment

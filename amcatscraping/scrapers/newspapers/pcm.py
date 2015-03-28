@@ -26,6 +26,7 @@ from urllib import quote
 import pyamf
 from pyamf import remoting
 from pyamf.flex import messaging
+from amcatscraping.article import Article
 
 from amcatscraping.scraper import LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper
 from amcatscraping.tools import parse_form
@@ -145,7 +146,7 @@ class PCMScraper(LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper):
         article['section'] = index['section']
         article['pagenr'] = index['pagenr']
         if article['text'] and article['headline']:
-            return article
+            return Article(article)
 
     def _get_latest(self):
         """

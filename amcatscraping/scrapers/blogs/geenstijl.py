@@ -24,6 +24,7 @@ import logging
 
 from amcatscraping.scraper import UnitScraper, DateRangeScraper, PropertyCheckMixin
 from amcatscraping.tools import html2text, read_date
+from amcatscraping.article import Article
 
 
 ARCHIEF_URL = "http://www.geenstijl.nl/mt/archieven/maandelijks/%Y/%m/"
@@ -86,13 +87,13 @@ class GeenstijlScraper(PropertyCheckMixin, UnitScraper, DateRangeScraper):
         url = "{base_url}#{article_id}".format(**locals())
         author, timestamp = _parse_comment_footer(comment.cssselect("footer")[0].text_content())
 
-        return {
+        return Article({
             "date": timestamp,
             "headline": headline,
             "text": text.strip() or ".",
             "author": author,
             "url": url
-        }
+        })
 
     def _get_comments(self, headline, article_url, doc):
         for comment in doc.cssselect("#comments article"):
@@ -125,14 +126,17 @@ class GeenstijlScraper(PropertyCheckMixin, UnitScraper, DateRangeScraper):
         if not headline:
             return None
 
-        return {
+        properties = {
             "date": timestamp,
             "headline": headline,
             "text": text.strip() or ".",
             "author": author,
-            "url": article_url,
-            "children": list(self._get_comments(headline, article_url, article_doc))
+            "url": article_url
         }
+
+        children = self._get_comments(headline, article_url, article_doc)
+
+        return Article(properties, children)
 
     def update(self, article_tree):
         article = article_tree.article

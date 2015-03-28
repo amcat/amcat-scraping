@@ -24,6 +24,7 @@ import lxml.html
 from operator import attrgetter, itemgetter
 from urlparse import urljoin
 import re
+from amcatscraping.article import Article
 
 from amcatscraping.scraper import BinarySearchDateRangeScraper, CACHE_DIR, LoginMixin
 from amcatscraping.tools import read_date, memoize, html2text, open_json_cache, parse_form
@@ -203,7 +204,7 @@ class PHPBBScraper(LoginMixin, BinarySearchDateRangeScraper):
         author = post.cssselect(".username")[0].text_content().strip()
         author_url = urljoin(base_url, post.cssselect(".username")[0].get("href"))
 
-        return {
+        return Article({
             "date": date,
             "url": url,
             "text": text or ".",
@@ -219,7 +220,7 @@ class PHPBBScraper(LoginMixin, BinarySearchDateRangeScraper):
                 "post_count": int(post_count),
                 "sections": sections
             }
-        }
+        })
 
     def _get_title(self, doc):
         # Deleted posts don't have a title.
@@ -245,8 +246,8 @@ class PHPBBScraper(LoginMixin, BinarySearchDateRangeScraper):
             return None
 
         article = self.parse_post(thread_id, self._get_title(doc), doc, posts[0])
-        article["children"] = list(self.get_comments(thread_id))
-        article["headline"] = self._get_title(doc)
+        article._children = self.get_comments(thread_id)
+        article.properties["headline"] = self._get_title(doc)
         return article
 
     def _get_comments(self, thread_id, title, pagenr):
@@ -287,7 +288,7 @@ class PHPBBScraper(LoginMixin, BinarySearchDateRangeScraper):
         thread_id = articles[0]["metastring"]["thread_id"]
 
         for article in self.get_comments(thread_id):
-            if article["url"] not in urls:
-                article["parent"] = articles[0]["id"]
+            if article.properties["url"] not in urls:
+                article.properties["parent"] = articles[0]["id"]
                 yield article
 

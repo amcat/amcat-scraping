@@ -20,6 +20,7 @@
 from datetime import date
 from urlparse import urljoin
 import lxml.html
+from amcatscraping.article import Article
 
 from amcatscraping.tools import setup_logging, parse_form
 from amcatscraping.scraper import (LoginMixin, PropertyCheckMixin,
@@ -79,7 +80,7 @@ class NRCScraper(LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper):
         }
 
         if article['text']:
-            return article
+            return Article(article)
 
     _props = {
         'defaults': {},

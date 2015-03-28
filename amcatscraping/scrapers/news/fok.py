@@ -7,6 +7,7 @@ import datetime
 import json
 import os
 import errno
+from amcatscraping.article import Article
 
 from amcatscraping.scraper import PropertyCheckMixin, UnitScraper, BinarySearchDateRangeScraper
 from amcatscraping.tools import read_date, memoize, html2text
@@ -122,7 +123,7 @@ class FOKScraper(PropertyCheckMixin, BinarySearchDateRangeScraper):
             livecomment_id = comment.get("data-livecomment")
             date = parse_comment_date(top_bar.cssselect(".posttime a")[0].text.strip())
 
-            yield {
+            yield Article({
                 "author": author,
                 "headline": headline,
                 "section": section,
@@ -134,7 +135,7 @@ class FOKScraper(PropertyCheckMixin, BinarySearchDateRangeScraper):
                     "comment_id": comment_id,
                     "livecomment_id": livecomment_id
                 },
-            }
+            })
 
     def scrape_unit(self, article_id):
         url = ARTILCE_URL.format(**locals())
@@ -164,7 +165,9 @@ class FOKScraper(PropertyCheckMixin, BinarySearchDateRangeScraper):
         section = doc.cssselect("#crumbs li")[-1].cssselect("a")[0].text.strip()
         text = html2text(article[0].cssselect("p")).strip()
 
-        return {
+        children = self.get_comments(headline, url, section, doc)
+
+        properties = {
             "author": author,
             "headline": headline,
             "date": date,
@@ -174,8 +177,9 @@ class FOKScraper(PropertyCheckMixin, BinarySearchDateRangeScraper):
             "metastring": {
                 "article_id": article_id
             },
-            "children": list(self.get_comments(headline, url, section, doc))
         }
+
+        return Article(properties, children)
 
     def update(self, article_tree):
         article, children = article_tree
@@ -185,8 +189,8 @@ class FOKScraper(PropertyCheckMixin, BinarySearchDateRangeScraper):
         urls = {comment.article["url"] for comment in children}
 
         for comment in comments:
-            if comment["url"] not in urls:
-                comment["parent"] = article["id"]
+            if comment.properties["url"] not in urls:
+                comment.properties["parent"] = article["id"]
                 yield comment
 
     _props = {

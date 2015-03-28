@@ -90,7 +90,7 @@ class TelegraafScraper(LoginMixin,PropertyCheckMixin,UnitScraper,DateRangeScrape
             'media_caption': body.get('media-caption')
         })
 
-        return article
+        return Article(article)
 
     _props = {
         'defaults': {

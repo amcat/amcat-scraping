@@ -16,7 +16,7 @@
 # You should have received a copy of the GNU Lesser General Public        #
 # License along with AmCAT.  If not, see <http://www.gnu.org/licenses/>.  #
 ###########################################################################
-from __future__ import print_function
+from __future__ import print_function, unicode_literals
 from collections import namedtuple
 from operator import itemgetter
 
@@ -28,6 +28,7 @@ import sys
 import logging
 import itertools
 import collections
+from amcatscraping.article import Article
 
 from .httpsession import Session
 from .tools import to_date, memoize, open_json_cache
@@ -54,14 +55,75 @@ def build_tree(articles):
     return [_build_tree(article_children, articles, article_id) for article_id in article_children[None]]
 
 
-def count_articles(articles):
-    children = filter(None, (a.get("children", ()) for a in articles))
-    return len(articles) + sum(map(count_articles, children))
+def add_articles(articles, article, batch_size=100, parent=None):
+    """
+    Maps a tree of articles (that is, an article optionally having an 'children' property) to
+    a flat list of articles. Articles are returned in batches, leaving the residue in the
+    original given set.
+
+    To further comment on the usefulness of this function (as it seems hopefully complicated
+    at first glance): it helps chopping up (lazily!) article trees returned by scrapers. For
+    example, a scrape function might be implemented in the following manner:
+
+    >>> articles = []
+    >>>
+    >>> for article in self.scrape():
+    >>>     for batch in add_articles(articles, article):
+    >>>         self.save(batch)
+    >>>
+    >>> # Saving residue
+    >>> self.save(articles)
+
+    The save function *must* account for the parent property being a dict, instead of an id. On
+    top of that, it should replace parent references by ids once they are saved.
+
+    @type articles: list
+    @type article: Article
+    """
+    articles.append(article)
+    article.parent = parent
+
+    if len(articles) >= batch_size:
+        yield list(articles)
+        while articles:
+            articles.pop()
+
+    for child in article.children:
+        for a in add_articles(articles, child, batch_size=batch_size, parent=article):
+            yield a
+
+
+def _get_tree(parent_map, article):
+    children = [_get_tree(parent_map, child) for child in parent_map[article]]
+
+    if article.parent and article.parent.id is not None:
+        article.properties["parent"] = article.parent.id
+
+    return Article(article.properties, children, uuid=article.uuid)
+
+
+def get_tree(articles):
+    """Build tree ready to be committed to API"""
+    parent_map = collections.defaultdict(list)
+    for article in articles:
+        parent = article.parent if article.parent in articles else None
+        parent_map[parent].append(article)
+    return [_get_tree(parent_map, root) for root in parent_map[None]]
+
+
+def tree_to_json(tree):
+    return [dict(a.properties, children=list(tree_to_json(a.children))) for a in tree]
+
+
+def walk(tree):
+    yield tree
+    for child in tree.children:
+        for t in walk(child):
+            yield t
 
 
 class Scraper(object):
-    def __init__(self, project_id, articleset_id, batched=False, batch_size=1000, dry_run=False, api_host=None, api_user=None, api_password=None, **kwargs):
-        self.batched = batched
+    def __init__(self, project_id, articleset_id, batch_size=100, dry_run=False, api_host=None, api_user=None, api_password=None, **kwargs):
         self.batch_size = batch_size
         self.dry_run = dry_run
 
@@ -72,8 +134,12 @@ class Scraper(object):
         self.api_user = api_user
         self.api_password = api_password
 
+        if not dry_run:
+            self.api = self._api_auth()
+        else:
+            self.api = None
+
         self.session = Session()
-        self.api = self._api_auth()
         self.setup_session()
 
     def _api_auth(self):
@@ -96,19 +162,32 @@ class Scraper(object):
         raise NotImplementedError("update() not implemented.")
 
     def _save(self, articles):
-        articles = self.api.create_articles(
+        tree = get_tree(set(articles))
+
+        new_articles = self.api.create_articles(
             project=self.project_id,
             articleset=self.articleset_id,
-            json_data=articles
+            json_data=tree_to_json(tree)
         )
-        return [article["id"] for article in articles]
+
+        new_article_ids = [article["id"] for article in new_articles]
+        new_articles = list(itertools.chain(*map(walk, tree)))
+        articles = {a.uuid: a for a in articles}
+
+        assert len(new_article_ids) == len(articles), "Not all articles were saved to db."
+
+        for uuid, article_id in zip([a.uuid for a in new_articles], new_article_ids):
+            article = articles[uuid]
+            article.id = article_id
+
+        return new_article_ids
 
     def save(self, articles, tries=5, timeout=15):
         if self.dry_run:
-            log.info("Scraper returned %s articles (not saving due to --dry-run)", count_articles(articles))
+            log.info("Scraper returned %s articles (not saving due to --dry-run)", len(articles))
             return range(len(articles))
 
-        log.info("Saving {alen} articles..".format(alen=count_articles(articles)))
+        log.info("Saving {alen} articles..".format(alen=len(articles)))
 
         # AmCAT API is really unstable :-(.
         try:
@@ -132,41 +211,33 @@ class Scraper(object):
             return self.save(articles, tries=tries-1, timeout=timeout + 120)
 
     def _postprocess_json(self, article):
-        if "metastring" in article:
-            article["metastring"] = json.dumps(article["metastring"])
-        article["children"] = map(self._postprocess_json, map(dict, article.get("children", ())))
-        return article
+        article.properties["metastring"] = json.dumps(article.properties.get("metastring", {}))
 
     def postprocess(self, articles):
         """Space to do something with the unsaved articles that the scraper provided"""
-        for article in map(dict, filter(None, articles)):
-            yield self._postprocess_json(article)
+        for article in filter(None, articles):
+            self._postprocess_json(article)
+            yield article
 
     def _run(self, scrape_func):
-        articles = []
+        articles = list()
         article_count = 0
 
-        if self.batched:
-            log.info("Running scraper {self.__class__.__name__} (batch size: {self.batch_size})".format(**locals()))
-        else:
-            log.info("Running scraper {self.__class__.__name__}..".format(**locals()))
+        log.info("Running scraper {self.__class__.__name__} (batch size: {self.batch_size})".format(**locals()))
 
         for a in scrape_func():
+            assert isinstance(a, Article)
+
             sys.stdout.write(".")
             sys.stdout.flush()
 
-            articles.append(a)
-            size = count_articles(articles)
-
-            # Check if batch size is reached. If so: save articles, and proceed.
-            if self.batched and size >= self.batch_size:
-                log.info("Accumulated {size} articles. Preprocessing / saving..".format(**locals()))
-                yield self.save(list(self.postprocess(articles)))
-                articles = []
-                article_count += size
+            for batch in add_articles(articles, a, batch_size=self.batch_size):
+                log.info("Accumulated {} articles. Preprocessing / saving..".format(len(batch)))
+                yield self.save(list(self.postprocess(batch)))
+                article_count += len(batch)
 
         # Save articles not yet saved in loop
-        article_count += count_articles(articles)
+        article_count += len(articles)
         log.info("Scraped a total of {article_count} articles.".format(**locals()))
         yield self.save(list(self.postprocess(articles)))
 
@@ -233,8 +304,15 @@ class DateRangeScraper(Scraper):
 
     def postprocess(self, articles):
         articles = list(super(DateRangeScraper, self).postprocess(articles))
-        for a in articles:
-            assert self.min_date <= to_date(a['date']) <= self.max_date
+
+        for article in articles:
+            date = to_date(article.properties["date"])
+            is_proper_date = self.min_date <= date <= self.max_date
+
+            if article.parent is None and article.properties.get("parent") is None:
+                error_msg = "{date} not within [{self.min_date}, {self.max_date}]"
+                assert is_proper_date, error_msg.format(**locals())
+
         return articles
 
     def _run_update_date(self, medium_id, date):
@@ -454,8 +532,8 @@ class BinarySearchDateRangeScraper(DateRangeScraper, BinarySearchScraper):
         self._dump_id_cache()
 
         articles = itertools.ifilter(None, self._get_units(article_id))
-        articles = itertools.ifilter(lambda a: to_date(a["date"]) >= self.dates[0], articles)
-        articles = itertools.takewhile(lambda a: to_date(a["date"]) <= self.dates[-1], articles)
+        articles = itertools.ifilter(lambda a: to_date(a.properties["date"]) >= self.dates[0], articles)
+        articles = itertools.takewhile(lambda a: to_date(a.properties["date"]) <= self.dates[-1], articles)
         return articles
 
     def scrape_unit(self, id):
@@ -479,8 +557,8 @@ class ContinuousScraper(DateRangeScraper):
 
     def scrape(self):
         articles = self._scrape()
-        articles = itertools.dropwhile(lambda a: to_date(a["date"]) < self.min_date, articles)
-        articles = itertools.takewhile(lambda a: to_date(a["date"]) <= self.min_date, articles)
+        articles = itertools.dropwhile(lambda a: to_date(a.properties["date"]) < self.min_date, articles)
+        articles = itertools.takewhile(lambda a: to_date(a.properties["date"]) <= self.min_date, articles)
         return articles
 
 
@@ -514,17 +592,16 @@ class PropertyCheckMixin(object):
             '<propertyN>' : '<value>'
             },
         'required' : ['<property1>', '<property2>', ..., '<propertyN>'],
-        'expected' : ['<property1>', '<property2>', ..., '<propertyN>']
         }
     'required' means all articles should have this property
-    'expected' means at least one article should have this property
     """
-
-    def postprocess(self, articles):
-        articles = super(PropertyCheckMixin, self).postprocess(articles)
+    def _postprocess(self, articles):
         self._add_defaults(articles)
         self._check_properties(articles)
         return articles
+
+    def postprocess(self, articles):
+        return self._postprocess(super(PropertyCheckMixin, self).postprocess(articles))
 
     def _add_defaults(self, articles):
         self._props['defaults']['project'] = self.project_id
@@ -532,23 +609,15 @@ class PropertyCheckMixin(object):
 
         for prop, default in self._props['defaults'].items():
             for article in articles:
-                if prop not in article:
-                    article[prop] = default
-
-        for article in articles:
-            self._add_defaults(article.get("children", ()))
+                if prop not in article.properties:
+                    article.properties[prop] = default
 
     def _check_properties(self, articles):
         if not articles:
             return
 
         for prop in self._props['required']:
-            if not all(prop in article or prop in article['metastring'] for article in articles):
-                raise ValueError("{prop} missing in at least one article".format(**locals()))
+            for article in articles:
+                if prop not in article.properties and prop not in article.properties['metastring']:
+                    raise ValueError("{prop} missing in {article}".format(**locals()))
 
-        for prop in self._props['expected']:
-            if not any(prop in article or prop in article['metastring'] for article in articles):
-                raise ValueError("{prop} missing in all articles".format(**locals()))
-
-        for article in articles:
-            self._add_defaults(article.get("children", ()))
