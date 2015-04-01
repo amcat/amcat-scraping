@@ -20,12 +20,13 @@
 import collections
 from datetime import date
 import itertools
+from amcatscraping.article import Article
 
 from amcatscraping.scraper import UnitScraper, DateRangeScraper, LoginMixin, PropertyCheckMixin
 from amcatscraping.tools import parse_form, setup_logging
 
 
-Article = collections.namedtuple("Article", ["article_id", "pagenr", "section", "date"])
+ArticleTuple = collections.namedtuple("Article", ["article_id", "pagenr", "section", "date"])
 
 ARTICLE_URL = "http://www.telegraaf.nl/telegraaf-i/article/{article_id}"
 LOGIN_URL = "https://www.telegraaf.nl/wuz/loginbox?nocache"
@@ -52,7 +53,7 @@ class TelegraafScraper(LoginMixin,PropertyCheckMixin,UnitScraper,DateRangeScrape
             for page in paper['pages']:
                 for article_id in page['articles']:
                     section = [s['title'] for s in paper['sections'] if page['page_number'] in s['pages']][0]
-                    yield Article(article_id, page['page_number'], section, mkdate(paper['date']))
+                    yield ArticleTuple(article_id, page['page_number'], section, mkdate(paper['date']))
 
     def scrape_unit(self, article):
         article_id, pagenr, section, date = article
