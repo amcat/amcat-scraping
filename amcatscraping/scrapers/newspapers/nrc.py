@@ -20,6 +20,7 @@
 from datetime import date
 from urlparse import urljoin
 import lxml.html
+import re
 from amcatscraping.article import Article
 
 from amcatscraping.tools import setup_logging, parse_form
@@ -29,9 +30,13 @@ from amcatscraping.scraper import (LoginMixin, PropertyCheckMixin,
 
 OVERVIEW_URL = "https://login.nrc.nl/overview"
 
+PUBLISHED_PREFIX = "Dit artikel werd gepubliceerd in"
+PUBLISHED_POSTFIX = " (?P<paper>[\w ]+) op (?P<date>[\w ,]+), pagina (?P<page>[\w -]+)"
+PUBLISHED_RE = re.compile(PUBLISHED_PREFIX + PUBLISHED_POSTFIX)
+
 
 class NRCScraper(LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper):
-    nrc_version = "NN"
+    nrc_version = None
 
     def __init__(self, *args, **kwargs):
         super(NRCScraper, self).__init__(*args, **kwargs)
@@ -66,16 +71,26 @@ class NRCScraper(LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper):
         datestr = url.split("/")[7].strip("_")
         location = doc.cssselect("em.location")
         person = doc.cssselect("p.by span.person")
+
+        published = doc.cssselect(".published")[0].text_content().strip()
+        published = PUBLISHED_RE.match(published).groupdict()
+
+        try:
+            pagenr = int(url.split("/")[8].split("_")[1])
+        except IndexError:
+            pagenr = int(published["page"].split("-")[0])
+
         article = {
             'date': date(*map(int, [datestr[:4], datestr[4:6], datestr[6:]])),
             'headline': doc.cssselect("#MainContent h2")[0].text_content(),
             'section': doc.cssselect("#Content ul.main-sections li.active span")[0].text,
-            'pagenr': int(url.split("/")[8].split("_")[1]),
             'author': person and person[0].text_content() or None,
             'text': "\n\n".join([t.text_content() for t in doc.cssselect("em.intro,div.column-left p")]),
+            'pagenr': pagenr,
             'metastring': {
                 'location': location and location[0].text or None,
                 'subtitle': "\n".join([h3.text_content() for h3 in doc.cssselect("div.column-left h3")]),
+                'published': published
             }
         }
 
