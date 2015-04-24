@@ -46,6 +46,9 @@ ARTICLE_URL = ARCHIVE_URL + "vw/txt.do?id={id}"
 
 # REs
 ARTICLE_ID_RE = re.compile("FD-[0-9-]+")
+NO_PAPER_AVAILABLE = re.compile(
+    "Er is geen uitgave van ([0-9a-zA-Z ]+) aanwezig."
+)
 
 
 class FinancieelDagbladScraper(LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper):
@@ -71,19 +74,23 @@ class FinancieelDagbladScraper(LoginMixin, PropertyCheckMixin, UnitScraper, Date
         return (line.strip() for line in page if line.strip().startswith("sectionTable.add"))
 
     def _get_pages(self, date):
-        container = self.session.get_html(date.strftime(FRONTPAGE_URL).format(rxst=RXST))
-        frame_url = container.cssselect("#pageframe")[0].get("src")
-        absolute_frame_url = urljoin(ARCHIVE_URL, frame_url)
+        frontpage_url = date.strftime(FRONTPAGE_URL).format(rxst=RXST)
 
-        doc = self.session.get_html(absolute_frame_url)
-        pages = doc.cssselect("#selectPage option")
+        front_page_content = self.session.get(frontpage_url).content
+        if not NO_PAPER_AVAILABLE.findall(front_page_content):
+            container = self.session.get_html(frontpage_url)
+            frame_url = container.cssselect("#pageframe")[0].get("src")
+            absolute_frame_url = urljoin(ARCHIVE_URL, frame_url)
 
-        for page in pages:
-            page_nr, section = page.text.split("-")
-            page_nr = page_nr.strip()[1:]
-            section = section.strip()
-            page_url = date.strftime(PAGE_URL).format(id=page.get("value"))
-            yield page_nr, section, page_url
+            doc = self.session.get_html(absolute_frame_url)
+            pages = doc.cssselect("#selectPage option")
+
+            for page in pages:
+                page_nr, section = page.text.split("-")
+                page_nr = page_nr.strip()[1:]
+                section = section.strip()
+                page_url = date.strftime(PAGE_URL).format(id=page.get("value"))
+                yield page_nr, section, page_url
 
     def _get_articles(self, date, url):
         page_doc = self.session.get_html(url)
@@ -110,6 +117,9 @@ class FinancieelDagbladScraper(LoginMixin, PropertyCheckMixin, UnitScraper, Date
         text = article.cssselect("td > font.artbody")[1:]
         text = map(html2text, map(lxml.html.tostring, text))
         text = "\n\n".join(p.replace("\n", "") for p in text)
+
+        if not article.cssselect("td.artheader"):
+            return None
 
         article_properties = {
             "headline": article.cssselect("td.artheader")[0].text,
