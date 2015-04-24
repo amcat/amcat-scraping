@@ -16,10 +16,12 @@
 # You should have received a copy of the GNU Lesser General Public        #
 # License along with AmCAT.  If not, see <http://www.gnu.org/licenses/>.  #
 ###########################################################################
-import collections
+import logging
+
 from html2text import html2text
 import lxml.html
-from urlparse import urljoin
+
+from urlparse import urljoin, urlparse, parse_qs
 import re
 
 from amcatscraping.article import Article
@@ -28,12 +30,7 @@ from amcatscraping.scraper import (LoginMixin, PropertyCheckMixin,
                                    UnitScraper, DateRangeScraper)
 
 
-# This is a magic value stolen from the browser (you can retrieve it using
-# development tools in Chromium / Firefox). I'm not sure how to fetch it
-# programmatically. Its past midnight and I can't be bothered much, so this
-# will have to do for now. I hope it's a non-expiring magic value.
-RXST = "WmNQM0ZYMWlvMU11ZFZWQnA2SG9QZz09"
-
+log = logging.getLogger(__name__)
 
 # URLS
 LOGIN_URL = "https://fd.nl/login"
@@ -43,6 +40,7 @@ INIT_URL = BASE_URL + "go?url=digikrant-archief.fd.nl/vw/edition.do?dp=FD%26altd
 FRONTPAGE_URL = ARCHIVE_URL + "vw/edition.do?dp=FD&altd=true&date=%Y%m%d&ed=00&rxst={rxst}"
 PAGE_URL = ARCHIVE_URL + "vw/page.do?id={id}&pagedisplay=true&date=%Y%m%d"
 ARTICLE_URL = ARCHIVE_URL + "vw/txt.do?id={id}"
+RXST_URL = BASE_URL + "go?url=digikrant-archief.fd.nl/vw/edition.do?forward=true%26dp=FD%26altd=true%26date=20140401%26uid=2711728%26oid=%26abo=DIGIPLUS%26ed=00"
 
 # REs
 ARTICLE_ID_RE = re.compile("FD-[0-9-]+")
@@ -52,6 +50,10 @@ NO_PAPER_AVAILABLE = re.compile(
 
 
 class FinancieelDagbladScraper(LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper):
+    def __init__(self, *args, **kwargs):
+        super(FinancieelDagbladScraper, self).__init__(*args, **kwargs)
+        self.rxst = None
+
     def login(self, username, password):
         # Set right cookies
         self.session.get(BASE_URL)
@@ -70,11 +72,21 @@ class FinancieelDagbladScraper(LoginMixin, PropertyCheckMixin, UnitScraper, Date
         # Check if logging in worked :)
         return response.url != login_fail_url
 
+    def _get_rxst(self):
+        if self.rxst is not None:
+            return self.rxst
+
+        redirect = self.session.get(RXST_URL, allow_redirects=False).headers["location"]
+        params = parse_qs(urlparse(redirect).query)
+        self.rxst = params['rxst'][0]
+        log.info("Found token {}".format(self.rxst))
+        return self.rxst
+
     def _get_section_table(self, page):
         return (line.strip() for line in page if line.strip().startswith("sectionTable.add"))
 
     def _get_pages(self, date):
-        frontpage_url = date.strftime(FRONTPAGE_URL).format(rxst=RXST)
+        frontpage_url = date.strftime(FRONTPAGE_URL).format(rxst=self._get_rxst())
 
         front_page_content = self.session.get(frontpage_url).content
         if not NO_PAPER_AVAILABLE.findall(front_page_content):
