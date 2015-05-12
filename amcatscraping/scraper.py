@@ -196,7 +196,7 @@ class Scraper(object):
             if tries <= 1:
                 raise
 
-            log.info("Failed saving.. retrying in {} seconds".format(timeout))
+            log.exception("Failed saving.. retrying in {} seconds".format(timeout))
             time.sleep(timeout)
 
             log.info("Trying reauth..")

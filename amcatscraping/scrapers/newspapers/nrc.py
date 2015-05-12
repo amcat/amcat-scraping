@@ -94,6 +94,8 @@ class NRCScraper(LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper):
             }
         }
 
+        if not article['headline']:
+            article['headline'] = '-'
         if article['text']:
             return Article(article)
 
