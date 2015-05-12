@@ -21,7 +21,10 @@ import datetime
 import base64
 import urlparse
 import uuid
+import time
 from urllib import quote
+import logging
+log = logging.getLogger(__name__)
 
 import pyamf
 from pyamf import remoting
@@ -89,13 +92,24 @@ class PCMScraper(LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper):
         form = parse_form(login_page)
         form['username'] = username
         form['password'] = password
-        login_page = self.session.post(url, data=form)
 
-        # Resolve ticket_url and save it
-        ticket_url = urlparse.urlparse(login_page.url)
-        ticket_url_params = dict(urlparse.parse_qsl(ticket_url.query))
         
-        if 'ticket' not in ticket_url_params:
+        def _get_ticket(form):
+            # Get ticket from login form
+            login_page = self.session.post(url, data=form)
+            ticket_url = urlparse.urlparse(login_page.url)
+            ticket_url_params = dict(urlparse.parse_qsl(ticket_url.query))
+            return ticket_url, ticket_url_params.get('ticket')
+
+        for i in range(20):
+            ticket_url, ticket = _get_ticket(form)
+            if ticket:
+                break
+            else:
+                log.warn("Login attempt {i} failed, retrying in 5 seconds".format(**locals()))
+                time.sleep(5)
+                
+        if not ticket:
             return False
 
         # Handshake server
@@ -107,7 +121,6 @@ class PCMScraper(LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper):
         self.headers.update(res.body.headers)
 
         # Send AMF Auth message to server
-        ticket = ticket_url_params['ticket']
         ticket = TICKET.format(**locals())
 
         com = self.create_message(messaging.CommandMessage, operation=8)
