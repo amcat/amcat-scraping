@@ -80,10 +80,17 @@ class NRCScraper(LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper):
         except IndexError:
             pagenr = int(published["page"].split("-")[0])
 
+        
+        section_span = doc.cssselect("#Content ul.main-sections li.active span")
+        if section_span:
+            section = section_span[0].text
+        else:
+            section = doc.cssselect("#Content .breadcrums a.previous")[0].text
+
         article = {
             'date': date(*map(int, [datestr[:4], datestr[4:6], datestr[6:]])),
             'headline': doc.cssselect("#MainContent h2")[0].text_content(),
-            'section': doc.cssselect("#Content ul.main-sections li.active span")[0].text,
+            'section': section,
             'author': person and person[0].text_content() or None,
             'text': "\n\n".join([t.text_content() for t in doc.cssselect("em.intro,div.column-left p")]),
             'pagenr': pagenr,
