@@ -62,8 +62,11 @@ class TelegraafScraper(LoginMixin,PropertyCheckMixin,UnitScraper,DateRangeScrape
             return None
 
         url = ARTICLE_URL.format(article_id=article_id)
-        data = collections.defaultdict(str, **self.session.get(url).json())
 
+        data = collections.defaultdict(str, **self.session.get(url).json())
+        if data.keys() == ["authenticate_url"]:
+            raise Exception("Login for Telegraaf failed")
+        
         article = {
             'url': url, 'metastring': {}, 'pagenr': pagenr,
             'section': section, 'date': date,

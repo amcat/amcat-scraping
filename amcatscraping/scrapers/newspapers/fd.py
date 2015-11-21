@@ -58,7 +58,10 @@ class FinancieelDagbladScraper(LoginMixin, PropertyCheckMixin, UnitScraper, Date
         # Set right cookies
         self.session.get(BASE_URL)
 
-        login_page = self.session.get(LOGIN_URL)
+        # HACK! FD has intermediate cert which is not downloaded automatically
+        # by requests/curl, so we disable ssl certification for the time being
+        # Please check whether this has been resolved and re-enable verification!
+        login_page = self.session.get(LOGIN_URL, verify=False)
         login_doc = lxml.html.fromstring(login_page.content)
         login_form = login_doc.cssselect("form.login")[0]
         login_post_url = login_form.get("action")
@@ -67,7 +70,7 @@ class FinancieelDagbladScraper(LoginMixin, PropertyCheckMixin, UnitScraper, Date
         # Login
         post_data = parse_form(login_form)
         post_data.update({"username": username, "password": password})
-        response = self.session.post(login_post_url, post_data)
+        response = self.session.post(login_post_url, post_data, verify=False)
 
         # Check if logging in worked :)
         return response.url != login_fail_url
