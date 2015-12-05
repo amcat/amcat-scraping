@@ -21,6 +21,7 @@ from __future__ import print_function, unicode_literals
 from collections import defaultdict
 import datetime
 import logging
+import requests
 
 from amcatscraping.scraper import UnitScraper, DateRangeScraper, PropertyCheckMixin
 from amcatscraping.tools import html2text, read_date
@@ -57,11 +58,13 @@ class GeenstijlScraper(PropertyCheckMixin, UnitScraper, DateRangeScraper):
         super(GeenstijlScraper, self).__init__(**kwargs)
         self.articles = defaultdict(set)
         self.session.encoding = "iso-8859-1"
+        # accepteer de cookies
+        requests.utils.add_dict_to_cookiejar(self.session.cookies, {"cpc": "10"})
 
     def get_units(self):
         for date in self.dates:
             day_string = date.strftime("%d-%m-%y")
-
+            
             if day_string not in self.articles:
                 self._get_archive(date)
 
@@ -71,8 +74,8 @@ class GeenstijlScraper(PropertyCheckMixin, UnitScraper, DateRangeScraper):
 
     def _get_archive(self, date):
         """Fill article-link cache with all articles written in the same month as 'date'"""
-        doc = self.session.get_html(date.strftime(ARCHIEF_URL))
-
+        url = date.strftime(ARCHIEF_URL)
+        doc = self.session.get_html(url)
         for li in doc.cssselect("li"):
             if not li.text:
                 continue
@@ -92,6 +95,7 @@ class GeenstijlScraper(PropertyCheckMixin, UnitScraper, DateRangeScraper):
             "headline": headline,
             "text": text.strip() or ".",
             "author": author,
+            "medium": "GeenStijl comments",
             "url": url
         })
 
