@@ -125,8 +125,7 @@ class GeenstijlScraper(PropertyCheckMixin, UnitScraper, DateRangeScraper):
             return None
 
         author = footer.text.rsplit("|", 1)[0].strip()
-        timestamp = read_date(article_el[0].cssselect("time")[0].get("datetime"))
-
+        timestamp = read_date(article_el[0].cssselect("footer > time")[0].get("datetime"))
         if not headline:
             return None
 
