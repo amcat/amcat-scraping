@@ -37,10 +37,15 @@ from amcatscraping.tools import parse_form
 
 
 # Login page
-LOGINURL = "https://caps.{domain}/service/login?service=http%3A%2F%2Fkrant.{domain}%2F%3Fpaper%3D{paper_id}%26zone%3D{regio_code}"
+#LOGINURL = "https://caps.{domain}/service/login?service=http%3A%2F%2Fkrant.{domain}%2F%3Fpaper%3D{paper_id}%26zone%3D{regio_code}"
+#https://caps.volkskrant.nl/service/login?service=http%3A%2F%2Fkrant.volkskrant.nl%2F%3Fpaper%3D64774%26zone%3DNL
+LOGINURL = "https://caps.{domain}/service/web/authentication?client_id=caps-vk-1201&redirect_uri=http%3A%2F%2Fwww.volkskrant.nl%2Fsso%2Flogin-redirect"
+
 AUTHURL = "https://caps.{domain}/service/validate?service="
 SAVEURL = "http://krant.%(domain)s/ipaper-online/saveLoginHistory?zone=%(regio_code)s&pubId=%(main_id)s&method=CAPS&paperId=%(paper_id)s&login=%(username)s"
 TICKET = "SSO_{self.paper_id}:{ticket_url.scheme}://{ticket_url.netloc}/@{ticket}"
+#SSO_8002:http://krant.volkskrant.nl/@ST-140917-cUkxf5oePnt6feDem5ZK-caps.volkskrant.nl
+TICKET = "SSO_{paper_id}:http://krant.{domain}/@{code}"
 
 # AMF API page
 AMFURL = "http://krant.{domain}/ipaper-online/blaze/amf"
@@ -89,28 +94,17 @@ class PCMScraper(LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper):
 
         # Login
         login_page = self.session.get_html(url)
-        form = parse_form(login_page)
-        form['username'] = username
-        form['password'] = password
-
         
-        def _get_ticket(form):
-            # Get ticket from login form
-            login_page = self.session.post(url, data=form)
-            ticket_url = urlparse.urlparse(login_page.url)
-            ticket_url_params = dict(urlparse.parse_qsl(ticket_url.query))
-            return ticket_url, ticket_url_params.get('ticket')
+        form = parse_form(login_page)
+        form['email'] = username
+        form['password'] = password
+        form['remember_me'] = True
 
-        for i in range(20):
-            ticket_url, ticket = _get_ticket(form)
-            if ticket:
-                break
-            else:
-                log.warn("Login attempt {i} failed, retrying in 5 seconds".format(**locals()))
-                time.sleep(5)
-                
-        if not ticket:
-            return False
+        login_page = self.session.post(url, json=form)
+        if login_page.status_code != 200:
+            raise Exception("Login page not loaded ({login_page.status_code}): {url}".format(**locals()))
+        res = login_page.json()
+        access_token, code = res['access_token'], res['code']
 
         # Handshake server
         com = self.create_message(messaging.CommandMessage, operation=5)
@@ -121,8 +115,8 @@ class PCMScraper(LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper):
         self.headers.update(res.body.headers)
 
         # Send AMF Auth message to server
-        ticket = TICKET.format(**locals())
-
+        # Note: we now have two paper_ids, a static self.paper_id (ie 8002) and dynamic paper_id (id 64774)
+        ticket = TICKET.format(paper_id=self.paper_id, domain=self.domain, code=code)
         com = self.create_message(messaging.CommandMessage, operation=8)
         com.destination = 'auth'
         com.body = base64.b64encode(ticket)
