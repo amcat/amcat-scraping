@@ -22,6 +22,8 @@ setup(
         "License :: OSI Approved :: MIT License",
     ],
     install_requires=[
+        "amcatclient",
+        "requests",
         "html2text",
         "cssselect",
         "pyamf",
