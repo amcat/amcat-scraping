@@ -11,3 +11,5 @@ nohup.out
 
 # Scraper db
 maintenance/scrapers
+
+*.egg-info

@@ -37,14 +37,9 @@ from amcatscraping.tools import parse_form
 
 
 # Login page
-#LOGINURL = "https://caps.{domain}/service/login?service=http%3A%2F%2Fkrant.{domain}%2F%3Fpaper%3D{paper_id}%26zone%3D{regio_code}"
-#https://caps.volkskrant.nl/service/login?service=http%3A%2F%2Fkrant.volkskrant.nl%2F%3Fpaper%3D64774%26zone%3DNL
-LOGINURL = "https://caps.{domain}/service/web/authentication?client_id=caps-vk-1201&redirect_uri=http%3A%2F%2Fwww.volkskrant.nl%2Fsso%2Flogin-redirect"
-
+LOGINURL = "https://caps.{domain}/service/web/authentication?client_id=caps-{caps_code}&redirect_uri={login_redirect}"
 AUTHURL = "https://caps.{domain}/service/validate?service="
 SAVEURL = "http://krant.%(domain)s/ipaper-online/saveLoginHistory?zone=%(regio_code)s&pubId=%(main_id)s&method=CAPS&paperId=%(paper_id)s&login=%(username)s"
-TICKET = "SSO_{self.paper_id}:{ticket_url.scheme}://{ticket_url.netloc}/@{ticket}"
-#SSO_8002:http://krant.volkskrant.nl/@ST-140917-cUkxf5oePnt6feDem5ZK-caps.volkskrant.nl
 TICKET = "SSO_{paper_id}:http://krant.{domain}/@{code}"
 
 # AMF API page
@@ -67,6 +62,8 @@ class PCMScraper(LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper):
     paper_id = None
     context_id = None
     domain = None
+    caps_code = None
+    login_redirect = None
 
     def __init__(self, *args, **kwargs):
         self.client_id = uuid4()
@@ -90,7 +87,9 @@ class PCMScraper(LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper):
         # Build url
         url = LOGINURL.format(paper_id=paper_id,
                               regio_code=self.context_id,
-                              domain=self.domain)
+                              domain=self.domain,
+                              caps_code=self.caps_code,
+                              login_redirect=self.login_redirect)
 
         # Login
         login_page = self.session.get_html(url)

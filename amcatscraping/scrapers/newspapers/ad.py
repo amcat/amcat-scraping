@@ -28,6 +28,9 @@ class AlgemeenDagbladScraper(pcm.PCMScraper):
     domain = "ad.nl"
     paper_id = 8001
     context_id = "AD"
+    caps_code = "ad-441"
+    login_redirect = "http%3A%2F%2Fkrant.ad.nl%2F"
+    
 
 
 if __name__ == '__main__':

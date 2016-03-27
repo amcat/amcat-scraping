@@ -31,6 +31,8 @@ class VolkskrantScraper(pcm.PCMScraper):
     domain = "volkskrant.nl"
     paper_id = 8002
     context_id = "NL"
+    caps_code = "vk-1201"
+    login_redirect = "http%3A%2F%2Fwww.volkskrant.nl%2Fsso%2Flogin-redirect"
 
 if __name__ == '__main__':
     from amcatscraping.tools import setup_logging
