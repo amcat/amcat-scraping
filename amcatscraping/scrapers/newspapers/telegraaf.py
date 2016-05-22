@@ -40,7 +40,7 @@ def mkdate(string):
 class TelegraafScraper(LoginMixin,PropertyCheckMixin,UnitScraper,DateRangeScraper):
     def login(self, username, password):
         self.session.get(WEEK_URL)
-        form = parse_form(self.session.get_html(LOGIN_URL).cssselect("#user-login")[0])
+        form = parse_form(self.session.get_html(LOGIN_URL, verify=False).cssselect("#user-login")[0])
         form.update({"name": username, "pass": password})
         self.session.headers.update({"Referer": LOGIN_URL})
         return "close-iframe" in self.session.post(LOGIN_URL, form).url
