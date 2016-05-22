@@ -13,3 +13,4 @@ nohup.out
 maintenance/scrapers
 
 *.egg-info
+env
