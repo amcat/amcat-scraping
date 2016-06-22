@@ -226,7 +226,7 @@ class Scraper(object):
         log.info("Running scraper {self.__class__.__name__} (batch size: {self.batch_size})".format(**locals()))
 
         for a in scrape_func():
-            assert isinstance(a, Article)
+            assert isinstance(a, Article), "a is {}, needs Article".format(type(a))
 
             sys.stdout.write(".")
             sys.stdout.flush()
