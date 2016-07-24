@@ -47,6 +47,7 @@ ARTICLE_ID_RE = re.compile("FD-[0-9-]+")
 NO_PAPER_AVAILABLE = re.compile(
     "Er is geen uitgave van ([0-9a-zA-Z ]+) aanwezig."
 )
+ACCEPT_COOKIE = {"cookieconsent": "true", "cookieLaw": "read"}
 
 
 class FinancieelDagbladScraper(LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper):
@@ -61,7 +62,8 @@ class FinancieelDagbladScraper(LoginMixin, PropertyCheckMixin, UnitScraper, Date
         # HACK! FD has intermediate cert which is not downloaded automatically
         # by requests/curl, so we disable ssl certification for the time being
         # Please check whether this has been resolved and re-enable verification!
-        login_page = self.session.get(LOGIN_URL, verify=False)
+        login_page = self.session.get(LOGIN_URL, verify=False, cookies=ACCEPT_COOKIE)
+        #open("/tmp/test.html","w").write(login_page.content)
         login_doc = lxml.html.fromstring(login_page.content)
         login_form = login_doc.cssselect("form.login")[0]
         login_post_url = login_form.get("action")
@@ -70,7 +72,7 @@ class FinancieelDagbladScraper(LoginMixin, PropertyCheckMixin, UnitScraper, Date
         # Login
         post_data = parse_form(login_form)
         post_data.update({"username": username, "password": password})
-        response = self.session.post(login_post_url, post_data, verify=False)
+        response = self.session.post(login_post_url, post_data, verify=False, allow_redirects=False)
 
         # Check if logging in worked :)
         return response.url != login_fail_url
@@ -79,7 +81,9 @@ class FinancieelDagbladScraper(LoginMixin, PropertyCheckMixin, UnitScraper, Date
         if self.rxst is not None:
             return self.rxst
 
-        redirect = self.session.get(RXST_URL, allow_redirects=False).headers["location"]
+        r = self.session.get(RXST_URL, allow_redirects=False)
+        # open("/tmp/test.html","w").write(r.content)
+        redirect = r.headers["location"]
         params = parse_qs(urlparse(redirect).query)
         self.rxst = params['rxst'][0]
         log.info("Found token {}".format(self.rxst))
