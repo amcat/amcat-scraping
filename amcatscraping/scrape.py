@@ -107,10 +107,18 @@ def run_single(config, args, scraper_config, scraper_class):
     min_date = max_date = datetime.date.today()
 
     if args["--from"]:
-        min_date = to_date(read_date(args["--from"]))
+        try:
+            reldate = int(args["--from"])
+            min_date = min_date + datetime.timedelta(days=reldate)
+        except ValueError:
+            min_date = to_date(read_date(args["--from"]))
 
     if args["--to"]:
-        max_date = to_date(read_date(args["--to"]))
+        try:
+            reldate = int(args["--to"])
+            max_date = max_date + datetime.timedelta(days=reldate)
+        except ValueError:
+            max_date = to_date(read_date(args["--to"]))
 
     opts = {
         "project_id": project_id,
