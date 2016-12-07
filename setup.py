@@ -19,7 +19,7 @@ setup(
       'amcatscraping': ['*.conf', 'templates/*.html'],
    },
     classifiers=[
-        "License :: OSI Approved :: MIT License",
+        "License :: OSI Approved :: AGPL3 License",
     ],
     install_requires=[
         "amcatclient",
