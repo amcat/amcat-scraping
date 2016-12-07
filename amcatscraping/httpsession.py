@@ -27,16 +27,16 @@ class Session(requests.Session):
     """Provides a HTTP session, HTML parsing and a few convenience methods"""
     def __init__(self):
         super(Session, self).__init__()
-        self.encoding = None
+        self.encoding = "utf-8"
         self.headers.update({
             "User-Agent": "Mozilla/5.0 (Windows NT 6.3; rv:36.0) Gecko/20100101 Firefox/36.0"
         })
 
     def get_html(self, link, **kwargs):
-        content = self.get(link, **kwargs).content
-        if self.encoding:
-            content = content.decode(self.encoding)
-        return lxml.html.fromstring(content, base_url=link)
+        content = self.get(link, **kwargs).content  # type: bytes
+        content = content.decode(self.encoding)
+        result = lxml.html.fromstring(content, base_url=link)
+        return result
 
     def get(self, link, tries=3, **kwargs):
         try:

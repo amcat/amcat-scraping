@@ -17,109 +17,41 @@
 # License along with AmCAT.  If not, see <http://www.gnu.org/licenses/>.  #
 ###########################################################################
 from __future__ import print_function, unicode_literals
-from collections import namedtuple
 from operator import itemgetter
 
 import json
 import os
 import time
 import datetime
-import sys
 import logging
 import itertools
-import collections
-from amcatscraping.article import Article
 
+from typing import Iterable, Sequence, List
+
+from amcat.models import DateTimeEncoder
+from amcat.tools.toolkit import splitlist
 from .httpsession import Session
 from .tools import to_date, memoize, open_json_cache
 from amcatclient.amcatclient import AmcatAPI, APIError
+from amcat.models import Article
 
 
 log = logging.getLogger(__name__)
 
-ArticleTree = namedtuple("ArticleTree", ["article", "children"])
+
+def article_to_json(article: Article):
+    static_fields = article.get_static_fields() - {"id", "project_id", "project"}
+    static_fields = {getattr(article, fn) for fn in static_fields}
+    return dict(static_fields, properties=article.get_properties())
 
 
-def _build_tree(article_children, articles, article_id):
-    children = [_build_tree(article_children, articles, a) for a in article_children[article_id]]
-    return ArticleTree(articles[article_id], children)
+class ArticleTree:
+    def __init__(self, article: Article, children: Sequence["ArticleTree"]):
+        self.article = article
+        self.children = children
 
-
-def build_tree(articles):
-    articles = {a["id"]: a for a in articles}
-    article_children = collections.defaultdict(set)
-
-    for article in articles.values():
-        article_children[article["parent"]].add(article["id"])
-
-    return [_build_tree(article_children, articles, article_id) for article_id in article_children[None]]
-
-
-def add_articles(articles, article, batch_size=100, parent=None):
-    """
-    Maps a tree of articles (that is, an article optionally having an 'children' property) to
-    a flat list of articles. Articles are returned in batches, leaving the residue in the
-    original given set.
-
-    To further comment on the usefulness of this function (as it seems hopefully complicated
-    at first glance): it helps chopping up (lazily!) article trees returned by scrapers. For
-    example, a scrape function might be implemented in the following manner:
-
-    >>> articles = []
-    >>>
-    >>> for article in self.scrape():
-    >>>     for batch in add_articles(articles, article):
-    >>>         self.save(batch)
-    >>>
-    >>> # Saving residue
-    >>> self.save(articles)
-
-    The save function *must* account for the parent property being a dict, instead of an id. On
-    top of that, it should replace parent references by ids once they are saved.
-
-    @type articles: list
-    @type article: Article
-    """
-    articles.append(article)
-    article.parent = parent
-
-    if len(articles) >= batch_size:
-        yield list(articles)
-        while articles:
-            articles.pop()
-
-    for child in article.children:
-        for a in add_articles(articles, child, batch_size=batch_size, parent=article):
-            yield a
-
-
-def _get_tree(parent_map, article):
-    children = [_get_tree(parent_map, child) for child in parent_map[article]]
-
-    if article.parent and article.parent.id is not None:
-        article.properties["parent"] = article.parent.id
-
-    return Article(article.properties, children, uuid=article.uuid)
-
-
-def get_tree(articles):
-    """Build tree ready to be committed to API"""
-    parent_map = collections.defaultdict(list)
-    for article in articles:
-        parent = article.parent if article.parent in articles else None
-        parent_map[parent].append(article)
-    return [_get_tree(parent_map, root) for root in parent_map[None]]
-
-
-def tree_to_json(tree):
-    return [dict(a.properties, children=list(tree_to_json(a.children))) for a in tree]
-
-
-def walk(tree):
-    yield tree
-    for child in tree.children:
-        for t in walk(child):
-            yield t
+    def __iter__(self):
+        return iter((self.article, self.children))
 
 
 class Scraper(object):
@@ -152,35 +84,11 @@ class Scraper(object):
         """Scrape the target resource and return a sequence of article dicts"""
         raise NotImplementedError("scrape() not implemented.")
 
-    def update(self, article_tree):
-        """Update given articletree. Function should return an iterator with *NEW*
-        articles. Each given article has an 'id', which can be used for the parent
-        property on new articles.
-
-        @type article_tree: ArticleTree
-        @param article_tree: Existing articles"""
-        raise NotImplementedError("update() not implemented.")
-
-    def _save(self, articles):
-        tree = get_tree(set(articles))
-
-        new_articles = self.api.create_articles(
-            project=self.project_id,
-            articleset=self.articleset_id,
-            json_data=tree_to_json(tree)
-        )
-
-        new_article_ids = [article["id"] for article in new_articles]
-        new_articles = list(itertools.chain(*map(walk, tree)))
-        articles = {a.uuid: a for a in articles}
-
-        assert len(new_article_ids) == len(articles), "Not all articles were saved to db."
-
-        for uuid, article_id in zip([a.uuid for a in new_articles], new_article_ids):
-            article = articles[uuid]
-            article.id = article_id
-
-        return new_article_ids
+    def _save(self, articles: List[Article]):
+        for batch in splitlist(articles, self.batch_size):
+            json_data = [article_to_json(a) for a in batch]
+            json_data = json.dumps(json_data, cls=DateTimeEncoder)
+            yield from self.api.create_articles(self.project_id, self.articleset_id, json_data)
 
     def save(self, articles, tries=5, timeout=15):
         if self.dry_run:
@@ -210,45 +118,37 @@ class Scraper(object):
 
             return self.save(articles, tries=tries-1, timeout=timeout + 120)
 
-    def _postprocess_json(self, article):
-        article.properties["metastring"] = json.dumps(article.properties.get("metastring", {}))
-
     def postprocess(self, articles):
         """Space to do something with the unsaved articles that the scraper provided"""
         for article in filter(None, articles):
-            self._postprocess_json(article)
             yield article
 
-    def _run(self, scrape_func):
-        articles = list()
-        article_count = 0
+    def process_tree(self, article_tree: ArticleTree, parent_hash=None) -> Iterable[Article]:
+        article, children = article_tree
+        article.parent_hash = parent_hash
+        article.compute_hash()
+        yield article
+        for child in children:
+            yield from self.process_tree(child, parent_hash=article.hash)
 
+    def _run(self):
         log.info("Running scraper {self.__class__.__name__} (batch size: {self.batch_size})".format(**locals()))
 
-        for a in scrape_func():
-            assert isinstance(a, Article), "a is {}, needs Article".format(type(a))
+        save_queue = []
+        for article_tree in self.scrape():
+            save_queue.extend(self.process_tree(article_tree, article_tree.article.parent_hash))
+            if len(save_queue) >= self.batch_size:
+                yield from self.save(save_queue)
+                save_queue.clear()
 
-            sys.stdout.write(".")
-            sys.stdout.flush()
-
-            for batch in add_articles(articles, a, batch_size=self.batch_size):
-                log.info("Accumulated {} articles. Preprocessing / saving..".format(len(batch)))
-                yield self.save(list(self.postprocess(batch)))
-                article_count += len(batch)
-
-        # Save articles not yet saved in loop
-        article_count += len(articles)
-        log.info("Scraped a total of {article_count} articles.".format(**locals()))
-        yield self.save(list(self.postprocess(articles)))
+        # Save all others
+        if save_queue:
+            yield from self.save(save_queue)
 
     def run(self):
-        articles = list(itertools.chain.from_iterable(self._run(self.scrape)))
+        articles = list(self._run())
         log.info("Saved a total of {alen} articles.".format(alen=len(articles)))
         return articles
-
-    def run_update(self):
-        error_msg = "This functionality is currently only available for DateRangeScrapers"
-        raise NotImplementedError(error_msg)
 
 
 class UnitScraper(Scraper):
@@ -273,7 +173,7 @@ class UnitScraper(Scraper):
             log.exception(e)
 
     def scrape(self):
-        for article in itertools.imap(self.scrape_unit, self.get_units()):
+        for article in map(self.scrape_unit, self.get_units()):
             if article is not None:
                 yield article
 
@@ -284,8 +184,6 @@ class DateRangeScraper(Scraper):
     Provides a first_date and last_date option which children classes can use
     to select data from their resource.
     """
-    medium = None
-
     def __init__(self, min_date, max_date, **kwargs):
         super(DateRangeScraper, self).__init__(**kwargs)
 
@@ -311,59 +209,12 @@ class DateRangeScraper(Scraper):
 
             if article.parent is None and article.properties.get("parent") is None:
                 error_msg = "{date} not within [{self.min_date}, {self.max_date}]"
-                assert is_proper_date, error_msg.format(**locals())
+                raise ValueError(error_msg.format(**locals()))
 
         return articles
 
-    def _run_update_date(self, medium_id, date):
-        log.info("Running update for {date}, medium_id={medium_id}".format(**locals()))
-
-        # Fetch articles from database (including all properties) for one specific day
-        log.info("Fetching existing articles..")
-        end_date = date + datetime.timedelta(days=1)
-        articles = self.api.search(self.articleset_id, None, start_date=date, end_date=end_date, mediumid=medium_id)
-        articles = [article["id"] for article in articles]
-
-        if not articles:
-            # Ideally, api.list_articles wouldn't return any articles when filtering on an
-            # empty list, but it does so we have to check for it explicitly.
-            log.info("No existing articles found")
-        else:
-            articles = list(self.api.list_articles(self.project_id, self.articleset_id, pk=articles))
-            log.info("Fetched {} existing articles".format(len(articles)))
-
-            for article in build_tree(articles):
-                for new_article in self.update(article):
-                    yield new_article
-
-    def _run_update(self):
-        log.info("Trying to find medium id..")
-
-        if self.medium is None:
-            log.warning("Scraper has no medium name set. Skipping..")
-        else:
-            results = self.api.request("medium", name=self.medium)['results']
-
-            if not results:
-                error_msg = "Could not find medium with name {!r} in database."
-                raise ValueError(error_msg.format(self.medium))
-            elif len(results) > 1:
-                error_msg = "Found multiple mediums with name={!r}"
-                raise ValueError(error_msg.format(self.medium))
-
-            medium_id = results[0]["id"]
-            articles = (self._run_update_date(medium_id, date) for date in self.dates)
-            return itertools.chain.from_iterable(articles)
-
-        return []
-
-    def run_update(self):
-        """@raises: NotImplementedError if update functionality is not implemented"""
-        log.info("Running update for {self.__class__.__name__}".format(**locals()))
-        return list(self._run(self._run_update))
-
-
 CACHE_DIR = os.path.expanduser("~/.cache")
+
 
 class DateNotFoundError(Exception):
     pass
@@ -513,7 +364,7 @@ class BinarySearchDateRangeScraper(DateRangeScraper, BinarySearchScraper):
     """
     def _get_units(self, article_id):
         first_pos = self.valid_ids_pos[article_id]
-        return itertools.imap(self.scrape_unit, self.valid_ids[first_pos:])
+        return map(self.scrape_unit, self.valid_ids[first_pos:])
 
     def scrape(self):
         article_id = None
@@ -531,8 +382,8 @@ class BinarySearchDateRangeScraper(DateRangeScraper, BinarySearchScraper):
 
         self._dump_id_cache()
 
-        articles = itertools.ifilter(None, self._get_units(article_id))
-        articles = itertools.ifilter(lambda a: to_date(a.properties["date"]) >= self.dates[0], articles)
+        articles = filter(None, self._get_units(article_id))
+        articles = filter(lambda a: to_date(a.properties["date"]) >= self.dates[0], articles)
         articles = itertools.takewhile(lambda a: to_date(a.properties["date"]) <= self.dates[-1], articles)
         return articles
 
@@ -577,47 +428,4 @@ class LoginMixin(object):
         
     def login(self, username, password):
         raise NotImplementedError("login() not implemented.")
-
-
-class PropertyCheckMixin(object):
-    """
-    Before saving, this mixin has the scraper check whether all given article props are present
-    and fill in the blanks with default values
-    When mixing this in, make sure the scraper contains a '_props' member with the following structure:
-    {
-        'defaults' : {
-            '<property1>' : '<value>',
-            '<property2>' : '<value>',
-            ...
-            '<propertyN>' : '<value>'
-            },
-        'required' : ['<property1>', '<property2>', ..., '<propertyN>'],
-        }
-    'required' means all articles should have this property
-    """
-    def _postprocess(self, articles):
-        self._add_defaults(articles)
-        self._check_properties(articles)
-        return articles
-
-    def postprocess(self, articles):
-        return self._postprocess(super(PropertyCheckMixin, self).postprocess(articles))
-
-    def _add_defaults(self, articles):
-        self._props['defaults']['project'] = self.project_id
-        self._props['defaults']['metastring'] = {}
-
-        for prop, default in self._props['defaults'].items():
-            for article in articles:
-                if prop not in article.properties:
-                    article.properties[prop] = default
-
-    def _check_properties(self, articles):
-        if not articles:
-            return
-
-        for prop in self._props['required']:
-            for article in articles:
-                if prop not in article.properties and prop not in article.properties['metastring']:
-                    raise ValueError("{prop} missing in {article}".format(**locals()))
 

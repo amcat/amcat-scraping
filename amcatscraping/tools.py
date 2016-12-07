@@ -41,26 +41,19 @@ _boolean_states = {
 def get_boolean(v):
     """Convert string to boolean, based on rules of ConfigParser"""
     if v.lower() not in _boolean_states:
-        raise ValueError, 'Not a boolean: %s' % v
+        raise ValueError('Not a boolean: %s' % v)
     return _boolean_states[v.lower()]
 
 
-def setup_django():
-    import django
-
-    try:
-        django.setup()
-    except django.core.exceptions.ImproperlyConfigured:
-        django.conf.settings.configure()
-        django.setup()
-
-
 def _html2text(data, handler):
-    if isinstance(data, basestring):
+    if isinstance(data, bytes):
+        raise ValueError("You supplied bytes. Please decode at borders of I/O!!")
+
+    if isinstance(data, str):
         return handler.handle(data).strip()
 
     if isinstance(data, (html.HtmlElement, etree._Element)):
-        return html2text(html.tostring(data))
+        return html2text(html.tostring(data, encoding="unicode"))
 
     # Assume iterable
     return "\n\n".join(html2text(bit) for bit in data)
@@ -74,8 +67,7 @@ def html2text(data, bodywidth=0, baseurl='', ignore_links=True, ignore_images=Tr
 
 
 def parse_form(form):
-    return {inp.get('name'): inp.get('value', '').encode('utf-8') for inp in
-            form.cssselect('input')}
+    return {inp.get('name'): inp.get('value', '') for inp in form.cssselect('input')}
 
 
 def setup_logging():

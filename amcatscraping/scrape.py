@@ -1,6 +1,6 @@
 ###########################################################################
-# (C) Vrije Universiteit, Amsterdam (the Netherlands)            #
-# #
+# (C) Vrije Universiteit, Amsterdam (the Netherlands)                     #
+#                                                                         #
 # This file is part of AmCAT - The Amsterdam Content Analysis Toolkit     #
 #                                                                         #
 # AmCAT is free software: you can redistribute it and/or modify it under  #
@@ -35,13 +35,12 @@ Options:
   --update         Update comment threads of existing articles
 
 """
-from __future__ import print_function
-
+import amcatscraping.setup_django
+import amcatscraping.scraper
+import configparser
 import collections
-from StringIO import StringIO
-from email.utils import formatdate
 import glob
-from itertools import imap
+import io
 import json
 import logging
 import os.path
@@ -50,22 +49,16 @@ import jinja2
 import datetime
 import tabulate
 import uuid
-
-from django.core.mail import EmailMultiAlternatives, get_connection
 import errno
 
-import amcatscraping.tools
+from email.utils import formatdate
+from django.core.mail import EmailMultiAlternatives, get_connection
 from amcatscraping.tools import read_date, get_boolean, to_date
-import amcatscraping.scraper
 
 
 JINJA_ENV = jinja2.Environment(loader=jinja2.PackageLoader('amcatscraping', 'templates'))
 EMAIL_TEMPLATE = JINJA_ENV.get_template('log_email.html')
 
-try:
-    import configparser
-except ImportError:
-    import ConfigParser as configparser
 
 log = logging.getLogger(__name__)
 
@@ -168,7 +161,7 @@ def _run(config, args, scrapers):
 
     root_logger = logging.getLogger(amcatscraping.scraper.__name__)
     for label, scraper in scrapers.items():
-        log_buffer = StringIO()
+        log_buffer = io.StringIO()
         log_handler = logging.StreamHandler(log_buffer)
         root_logger.addHandler(log_handler)
 
@@ -195,7 +188,7 @@ def run(config, args, scrapers):
         if exception.errno != errno.EEXIST:
             raise
 
-    for label, (timestamp, narticles, failed, log) in logs.iteritems():
+    for label, (timestamp, narticles, failed, log) in logs.items():
         json.dump({
             "narticles": narticles, "log": log, "label": label,
             "timestamp": int(timestamp.strftime("%s")),
@@ -213,7 +206,7 @@ def _bool_to_str(val):
 def get_logs(date):
     log_dir = os.path.join(LOG_DIR, date.strftime("%Y-%m-%d"))
     files = glob.glob(os.path.join(log_dir, "*.json"))
-    logs = imap(json.load, imap(open, files))
+    logs = map(json.load, map(open, files))
     logs = sorted(logs, key=lambda l: (l['label'], l['timestamp']))
 
     for log in logs:
@@ -286,7 +279,7 @@ def _send_email(config, headers, table_data):
 
 
 def get_config():
-    config = configparser.SafeConfigParser()
+    config = configparser.ConfigParser()
     config.read([DEFAULT_CONFIG_FILE, USER_CONFIG_FILE])
     return config
 
@@ -333,7 +326,6 @@ def main(config, args):
 if __name__ == '__main__':
     from docopt import docopt
 
-    amcatscraping.tools.setup_django()
     amcatscraping.tools.setup_logging()
     main(get_config(), docopt(__doc__, sys.argv[1:]))
 

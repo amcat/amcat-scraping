@@ -18,14 +18,14 @@
 ###########################################################################
 from __future__ import print_function, unicode_literals
 
-from collections import defaultdict
 import datetime
 import logging
 import requests
 
-from amcatscraping.scraper import UnitScraper, DateRangeScraper, PropertyCheckMixin
+from amcat.models import Article
+from amcatscraping.scraper import UnitScraper, DateRangeScraper, ArticleTree
 from amcatscraping.tools import html2text, read_date
-from amcatscraping.article import Article
+from collections import defaultdict
 
 
 ARCHIEF_URL = "http://www.geenstijl.nl/mt/archieven/maandelijks/%Y/%m/"
@@ -51,7 +51,7 @@ def _parse_comment_footer(footer):
     return author, timestamp
 
 
-class GeenstijlScraper(PropertyCheckMixin, UnitScraper, DateRangeScraper):
+class GeenstijlScraper(UnitScraper, DateRangeScraper):
     medium = "Geenstijl"
 
     def __init__(self, **kwargs):
@@ -83,21 +83,17 @@ class GeenstijlScraper(PropertyCheckMixin, UnitScraper, DateRangeScraper):
             link = li.cssselect("a")[0].get("href")
             self.articles[li.text.strip()].add(link.strip())
 
-    def _parse_comment(self, comment, base_headline, base_url):
+    def _parse_comment(self, comment, base_title, base_url):
         text = html2text(comment.cssselect("p"))
         article_id = comment.get("id")
-        headline = "{base_headline}#{article_id}".format(**locals())
+        title = "{base_title}#{article_id}".format(**locals())
         url = "{base_url}#{article_id}".format(**locals())
         author, timestamp = _parse_comment_footer(comment.cssselect("footer")[0].text_content())
 
-        return Article({
-            "date": timestamp,
-            "headline": headline,
-            "text": text.strip() or ".",
-            "author": author,
-            "medium": "GeenStijl comments",
-            "url": url
-        })
+        article = Article(date=timestamp, title=title, text=text.strip() or ".", url=url)
+        article.set_property("author", author.strip())
+        article.set_property("medium", "GeenStijl Comments")
+        return article
 
     def _get_comments(self, headline, article_url, doc):
         for comment in doc.cssselect("#comments article"):
@@ -114,8 +110,9 @@ class GeenstijlScraper(PropertyCheckMixin, UnitScraper, DateRangeScraper):
             log.error("Could not find article on {article_url}".format(**locals()))
             return None
 
-        headline = article_el[0].cssselect("h1")[0].text
+        title = article_el[0].cssselect("h1")[0].text
         text = html2text(article_el[0].cssselect("p"))
+        text = text.strip() or "."
 
         try:
             footer = article_el[0].cssselect("footer")[0]
@@ -126,20 +123,17 @@ class GeenstijlScraper(PropertyCheckMixin, UnitScraper, DateRangeScraper):
 
         author = footer.text.rsplit("|", 1)[0].strip()
         timestamp = read_date(article_el[0].cssselect("footer > time")[0].get("datetime"))
-        if not headline:
+        if not title:
             return None
 
-        properties = {
-            "date": timestamp,
-            "headline": headline,
-            "text": text.strip() or ".",
-            "author": author,
-            "url": article_url
-        }
+        children = self._get_comments(title, article_url, article_doc)
 
-        children = self._get_comments(headline, article_url, article_doc)
+        article = Article(date=timestamp, title=title, text=text)
+        article.set_property("author", author)
+        article.set_property("url", article_url)
+        article.set_property("medium", "GeenStijl")
 
-        return Article(properties, children)
+        return ArticleTree(article, [ArticleTree(c, []) for c in children])
 
     def update(self, article_tree):
         article = article_tree.article
@@ -151,14 +145,4 @@ class GeenstijlScraper(PropertyCheckMixin, UnitScraper, DateRangeScraper):
             if comment["url"] not in urls:
                 comment['parent'] = article["id"]
                 yield comment
-
-
-    _props = {
-        'defaults': {
-            'medium': "Geenstijl"
-        },
-        'required': ['date', 'text', 'headline', 'author'],
-        'expected': []
-    }
-
 
