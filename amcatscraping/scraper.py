@@ -16,7 +16,6 @@
 # You should have received a copy of the GNU Lesser General Public        #
 # License along with AmCAT.  If not, see <http://www.gnu.org/licenses/>.  #
 ###########################################################################
-from __future__ import print_function, unicode_literals
 from operator import itemgetter
 
 import json
@@ -40,9 +39,9 @@ log = logging.getLogger(__name__)
 
 
 def article_to_json(article: Article):
-    static_fields = article.get_static_fields() - {"id", "project_id", "project"}
-    static_fields = {getattr(article, fn) for fn in static_fields}
-    return dict(static_fields, properties=article.get_properties())
+    static_fields = article.get_static_fields() - {"id", "project_id", "project", "properties"}
+    static_fields = {fn: getattr(article, fn) for fn in static_fields}
+    return dict(static_fields, properties=dict(article.get_properties().items()))
 
 
 class ArticleTree:
