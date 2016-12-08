@@ -25,7 +25,7 @@ import datetime
 import logging
 import itertools
 
-from typing import Iterable, Sequence, List
+from typing import Iterable, List, Union
 
 from amcat.models import DateTimeEncoder
 from amcat.tools.toolkit import splitlist
@@ -44,10 +44,18 @@ def article_to_json(article: Article):
     return dict(static_fields, properties=dict(article.get_properties().items()))
 
 
+def to_trees(children: Iterable[Union[Article, "ArticleTree"]]) -> Iterable["ArticleTree"]:
+    for child in children:
+        if isinstance(child, Article):
+            yield ArticleTree(child, [])
+        else:
+            yield child
+
+
 class ArticleTree:
-    def __init__(self, article: Article, children: Sequence["ArticleTree"]):
+    def __init__(self, article: Article, children: Iterable[Union[Article, "ArticleTree"]]):
         self.article = article
-        self.children = children
+        self.children = list(to_trees(children))
 
     def __iter__(self):
         return iter((self.article, self.children))
@@ -73,23 +81,34 @@ class Scraper(object):
         self.session = Session()
         self.setup_session()
 
-    def _api_auth(self):
+    def _api_auth(self) -> AmcatAPI:
         return AmcatAPI(self.api_host, self.api_user, self.api_password)
 
     def setup_session(self):
         pass
 
-    def scrape(self):
+    def scrape(self) -> Iterable[Union[Article, ArticleTree]]:
         """Scrape the target resource and return a sequence of article dicts"""
         raise NotImplementedError("scrape() not implemented.")
 
-    def _save(self, articles: List[Article]):
+    def _save(self, articles: List[Article]) -> Iterable[Article]:
         for batch in splitlist(articles, self.batch_size):
             json_data = [article_to_json(a) for a in batch]
             json_data = json.dumps(json_data, cls=DateTimeEncoder)
-            yield from self.api.create_articles(self.project_id, self.articleset_id, json_data)
+            new_articles = self.api.create_articles(self.project_id, self.articleset_id, json_data)
+            for article, article_dict in zip(batch, new_articles):
+                article.id = article_dict["id"]
+                yield article
 
-    def save(self, articles, tries=5, timeout=15):
+    def save(self, articles: List[Article], tries=5, timeout=15) -> Iterable[Article]:
+        """
+        Save given articles to the database in batches.
+
+        :param articles: articles to be saved
+        :param tries: number of API errors it should tolerate before giving up
+        :param timeout: initial timeout, increases linearly with each try
+        :return: articles with id set
+        """
         if self.dry_run:
             log.info("Scraper returned %s articles (not saving due to --dry-run)", len(articles))
             return range(len(articles))
@@ -119,8 +138,7 @@ class Scraper(object):
 
     def postprocess(self, articles):
         """Space to do something with the unsaved articles that the scraper provided"""
-        for article in filter(None, articles):
-            yield article
+        return articles
 
     def process_tree(self, article_tree: ArticleTree, parent_hash=None) -> Iterable[Article]:
         article, children = article_tree
@@ -130,12 +148,19 @@ class Scraper(object):
         for child in children:
             yield from self.process_tree(child, parent_hash=article.hash)
 
-    def _run(self):
+    def _run(self) -> Iterable[Article]:
         log.info("Running scraper {self.__class__.__name__} (batch size: {self.batch_size})".format(**locals()))
 
         save_queue = []
         for article_tree in self.scrape():
+            # Scrape can yield articles or trees
+            if isinstance(article_tree, ArticleTree):
+                article_tree = next(iter(to_trees((article_tree,))))
+
+            # Flatten tree, add to save queue
             save_queue.extend(self.process_tree(article_tree, article_tree.article.parent_hash))
+
+            # Save if we've collected enough articles
             if len(save_queue) >= self.batch_size:
                 yield from self.save(save_queue)
                 save_queue.clear()
@@ -144,7 +169,7 @@ class Scraper(object):
         if save_queue:
             yield from self.save(save_queue)
 
-    def run(self):
+    def run(self) -> List[Article]:
         articles = list(self._run())
         log.info("Saved a total of {alen} articles.".format(alen=len(articles)))
         return articles
