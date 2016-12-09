@@ -38,6 +38,9 @@ class Session(requests.Session):
         result = lxml.html.fromstring(content, base_url=link)
         return result
 
+    def get_redirected_url(self, link, **kwargs):
+        return self.get(link, allow_redirects=False, **kwargs).headers["Location"]
+
     def get(self, link, tries=3, **kwargs):
         try:
             return super(Session, self).get(link.strip(), **kwargs)
