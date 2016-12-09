@@ -19,22 +19,19 @@
 
 import datetime
 import base64
-import urlparse
 import uuid
-import time
-from urllib import quote
 import logging
+
+from amcat.models import Article
+
 log = logging.getLogger(__name__)
 
 import pyamf
 from pyamf import remoting
 from pyamf.flex import messaging
-from amcatscraping.article import Article
 
-from amcatscraping.scraper import LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper
+from amcatscraping.scraper import LoginMixin, UnitScraper, DateRangeScraper
 from amcatscraping.tools import parse_form
-
-
 
 # Login page
 LOGINURL = "https://caps.{domain}/service/web/authentication?client_id=caps-{caps_code}&redirect_uri={login_redirect}"
@@ -51,14 +48,15 @@ LOGIN_SUCCESS = "Log In Successful"
 # Generate a valid uuid for an AMF object
 uuid4 = lambda: str(uuid.uuid4()).upper()
 
+
 # Convienience function
 def get_pubdate(paper):
-    pd = dict([(k, int(v)) for k,v in paper['pubDate'].items()])
+    pd = dict([(k, int(v)) for k, v in paper['pubDate'].items()])
     pd['month'] += 1
     return datetime.date(**pd)
 
 
-class PCMScraper(LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper):
+class PCMScraper(LoginMixin, UnitScraper, DateRangeScraper):
     paper_id = None
     context_id = None
     domain = None
@@ -68,12 +66,11 @@ class PCMScraper(LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper):
     def __init__(self, *args, **kwargs):
         self.client_id = uuid4()
         self.headers = {
-            'DSMessagingVersion':  1,
+            'DSMessagingVersion': 1,
             'DSId': 'nil'
         }
 
         super(PCMScraper, self).__init__(*args, **kwargs)
-
 
     def login(self, username, password):
         """
@@ -93,7 +90,7 @@ class PCMScraper(LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper):
 
         # Login
         login_page = self.session.get_html(url)
-        
+
         form = parse_form(login_page)
         form['email'] = username
         form['password'] = password
@@ -143,16 +140,21 @@ class PCMScraper(LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper):
                         continue
                     yield (index, art)
 
-    def scrape_unit(self, (index,art)):
-        article = {'metastring':{}}
-        article['author'] = art['author'][:100] if art['author'] else ''
-        article['headline'] = art['title']
-        article['text'] = "\n\n".join([el['text'] for el in art['bodyElements']])
-        article['date'] = index['date']
-        article['section'] = index['section']
-        article['pagenr'] = index['pagenr']
-        if article['text'] and article['headline']:
-            return Article(article)
+    def scrape_unit(self, index__art):
+        index, art = index__art
+
+        print(index["date"])
+
+        article = Article()
+        article.set_property('author', art['author'][:100] if art['author'] else '')
+        article.set_property('title', art['title'])
+        article.set_property('text', "\n\n".join([el['text'] for el in art['bodyElements']]))
+        article.set_property('date', index["date"])
+        article.set_property('section', index['section'])
+        article.set_property('pagenr', index['pagenr'])
+
+        if article.text and article.headline:
+            yield article
 
     def _get_latest(self):
         """
@@ -162,20 +164,18 @@ class PCMScraper(LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper):
             messaging.RemotingMessage,
             operation="getHome", body=[self.paper_id],
             destination="onlineFacade"
-            )
-        
+        )
+
         req = self.create_request(rmsg)
         env = self.create_envelope(req)
-        resp = self.apiget(env).bodies[0][1].body #.body['homePapers']
-        
+        resp = self.apiget(env).bodies[0][1].body  # .body['homePapers']
+
         if isinstance(resp, messaging.ErrorMessage):
             # Session was not cleared. Try again..
             return self._get_latest()
-            
+
         # Create date:paper dictionary and check for date
         return dict([(get_pubdate(p), p) for p in resp.body['homePapers']])
-
-
 
     def apiget(self, envelope):
         """
@@ -189,11 +189,9 @@ class PCMScraper(LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper):
         data = bytes(remoting.encode(envelope).read())
         url = AMFURL.format(domain=self.domain)
 
-
-        
         resp = remoting.decode(
-            self.session.get(url, data = data, headers = {'Content-Type':'application/x-amf'}).content
-            )
+            self.session.get(url, data=data, headers={'Content-Type': 'application/x-amf'}).content
+        )
 
         return resp
 
@@ -205,7 +203,7 @@ class PCMScraper(LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper):
         env.bodies = []
 
         for i, req in enumerate(requests):
-            env.bodies.append(("/%s" % (i+1), req))
+            env.bodies.append(("/%s" % (i + 1), req))
 
         return env
 
@@ -256,9 +254,3 @@ class PCMScraper(LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper):
                 index['doc'] = page
 
                 yield index
-
-    _props = {
-        'defaults' : {},
-        'required' : ['date','text','headline'],
-        'expected' : ['section','pagenr','author']
-        }
