@@ -21,17 +21,17 @@ import datetime
 import base64
 import uuid
 import logging
-
-from amcat.models import Article
-
-log = logging.getLogger(__name__)
-
 import pyamf
+
 from pyamf import remoting
 from pyamf.flex import messaging
 
+from amcat.models import Article
+
 from amcatscraping.scraper import LoginMixin, UnitScraper, DateRangeScraper
 from amcatscraping.tools import parse_form
+
+log = logging.getLogger(__name__)
 
 # Login page
 LOGINURL = "https://caps.{domain}/service/web/authentication?client_id=caps-{caps_code}&redirect_uri={login_redirect}"
@@ -115,7 +115,7 @@ class PCMScraper(LoginMixin, UnitScraper, DateRangeScraper):
         ticket = TICKET.format(paper_id=self.paper_id, domain=self.domain, code=code)
         com = self.create_message(messaging.CommandMessage, operation=8)
         com.destination = 'auth'
-        com.body = base64.b64encode(ticket)
+        com.body = base64.b64encode(ticket.encode())
 
         com.headers["DSEndpoint"] = "_IPaperOnlineServiceLocator_AMFChannel1"
         com.correlationId = ""
@@ -142,19 +142,19 @@ class PCMScraper(LoginMixin, UnitScraper, DateRangeScraper):
 
     def scrape_unit(self, index__art):
         index, art = index__art
-
-        print(index["date"])
+        date = index["date"]
 
         article = Article()
         article.set_property('author', art['author'][:100] if art['author'] else '')
         article.set_property('title', art['title'])
         article.set_property('text', "\n\n".join([el['text'] for el in art['bodyElements']]))
-        article.set_property('date', index["date"])
         article.set_property('section', index['section'])
-        article.set_property('pagenr', index['pagenr'])
+        article.set_property('page_int', index['pagenr'])
+        article.set_property('date', datetime.datetime(date.year, date.month, date.day))
 
-        if article.text and article.headline:
-            yield article
+
+        if article.text and article.title:
+            return article
 
     def _get_latest(self):
         """

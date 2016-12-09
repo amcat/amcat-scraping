@@ -23,11 +23,6 @@ from amcatscraping.scrapers.newspapers import pcm
 
 
 class TrouwScraper(pcm.PCMScraper):
-    def __init__(self, *args, **kwargs):
-        super(TrouwScraper, self).__init__(*args, **kwargs)
-        self._props['defaults']['medium'] = "Trouw"
-        self._props['defaults']['insertscript'] = 'TrouwScraper'
-
     domain = "trouw.nl"
     paper_id = 8004
     context_id = "NL"

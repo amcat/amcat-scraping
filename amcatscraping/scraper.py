@@ -154,7 +154,7 @@ class Scraper(object):
         save_queue = []
         for article_tree in self.scrape():
             # Scrape can yield articles or trees
-            if isinstance(article_tree, ArticleTree):
+            if not isinstance(article_tree, ArticleTree):
                 article_tree = next(iter(to_trees((article_tree,))))
 
             # Flatten tree, add to save queue

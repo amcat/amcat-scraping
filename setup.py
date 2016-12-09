@@ -26,7 +26,6 @@ setup(
         "requests",
         "html2text",
         "cssselect",
-        "pyamf",
         "jinja2",
         "django",
         "docopt",
