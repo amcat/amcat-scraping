@@ -25,7 +25,7 @@ import datetime
 import logging
 import itertools
 
-from typing import Iterable, List, Union
+from typing import Iterable, Sequence, List, Optional, Any, Union
 
 from amcat.models import DateTimeEncoder
 from amcat.tools.toolkit import splitlist
@@ -184,19 +184,13 @@ class UnitScraper(Scraper):
             yield self.scrape_unit(unit)
 
     """
-    def get_units(self):
+    def get_units(self) -> Iterable[Any]:
         return []
 
-    def scrape_unit(self, unit):
+    def scrape_unit(self, unit) -> Optional[Article]:
         return None
 
-    def _scrape(self, unit):
-        try:
-            return self.scrape_unit(unit)
-        except Exception as e:
-            log.exception(e)
-
-    def scrape(self):
+    def scrape(self) -> Iterable[Union[Article, ArticleTree]]:
         for article in map(self.scrape_unit, self.get_units()):
             if article is not None:
                 yield article
