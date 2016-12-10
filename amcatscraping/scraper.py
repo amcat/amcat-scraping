@@ -62,6 +62,8 @@ class ArticleTree:
 
 
 class Scraper(object):
+    publisher = None
+
     def __init__(self, project_id, articleset_id, batch_size=100, dry_run=False, api_host=None, api_user=None, api_password=None, **kwargs):
         self.batch_size = batch_size
         self.dry_run = dry_run
@@ -142,6 +144,10 @@ class Scraper(object):
 
     def process_tree(self, article_tree: ArticleTree, parent_hash=None) -> Iterable[Article]:
         article, children = article_tree
+
+        if self.publisher is not None and "publisher" not in article.properties:
+            article.set_property("publisher", self.publisher)
+
         article.parent_hash = parent_hash
         article.compute_hash()
         yield article

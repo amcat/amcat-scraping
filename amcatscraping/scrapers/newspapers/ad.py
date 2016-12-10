@@ -20,16 +20,12 @@ from amcatscraping.scrapers.newspapers import pcm
 
 
 class AlgemeenDagbladScraper(pcm.PCMScraper):
-    def __init__(self, *args, **kwargs):
-        super(AlgemeenDagbladScraper, self).__init__(*args, **kwargs)
-        self._props['defaults']['medium'] = 'Algemeen Dagblad'
-        self._props['defaults']['insertscript'] = 'AlgemeenDagbladScraper'
-
     domain = "ad.nl"
     paper_id = 8001
     context_id = "AD"
     caps_code = "ad-441"
     login_redirect = "http%3A%2F%2Fkrant.ad.nl%2F"
+    publisher = "Algemeen Dagblad"
     
 
 

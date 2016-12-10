@@ -70,6 +70,9 @@ class PCMScraper(LoginMixin, UnitScraper, DateRangeScraper):
             'DSId': 'nil'
         }
 
+        if self.publisher is None:
+            raise ValueError("Subclasses should set publisher name")
+
         super(PCMScraper, self).__init__(*args, **kwargs)
 
     def login(self, username, password):
@@ -149,9 +152,8 @@ class PCMScraper(LoginMixin, UnitScraper, DateRangeScraper):
         article.set_property('title', art['title'])
         article.set_property('text', "\n\n".join([el['text'] for el in art['bodyElements']]))
         article.set_property('section', index['section'])
-        article.set_property('page_int', index['pagenr'])
+        article.set_property('pagenr_int', index['pagenr'])
         article.set_property('date', datetime.datetime(date.year, date.month, date.day))
-
 
         if article.text and article.title:
             return article

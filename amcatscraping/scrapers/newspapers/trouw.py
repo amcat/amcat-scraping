@@ -28,6 +28,7 @@ class TrouwScraper(pcm.PCMScraper):
     context_id = "NL"
     caps_code = "tr-423"
     login_redirect = "http%3A%2F%2Fwww.trouw.nl%2Ftr%2Fsecured%2Fcheck.do"
+    publisher = "Trouw"
     
 if __name__ == '__main__':
     from amcatscraping.tools import setup_logging

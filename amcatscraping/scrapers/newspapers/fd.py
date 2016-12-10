@@ -61,6 +61,8 @@ def strip_query(url: str) -> str:
 
 
 class FinancieelDagbladScraper(LoginMixin, UnitScraper, DateRangeScraper):
+    publisher = "Financieel Dagblad"
+
     def __init__(self, *args, **kwargs):
         super(FinancieelDagbladScraper, self).__init__(*args, **kwargs)
         self.rxst = None

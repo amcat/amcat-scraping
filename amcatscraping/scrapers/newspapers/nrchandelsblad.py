@@ -20,11 +20,7 @@ from amcatscraping.scrapers.newspapers import nrc
 
 
 class NRCHandelsbladScraper(nrc.NRCScraper):
-    def __init__(self, *args, **kwargs):
-        super(NRCHandelsbladScraper, self).__init__(*args, **kwargs)
-        self._props['defaults']['medium'] = "NRC Handelsblad"
-        self._props['defaults']['insertscript'] = "NRCHandelsbladScraper"
-
+    publisher = "NRC Handelsblad"
     nrc_version = "NH"
 
 if __name__ == '__main__':
