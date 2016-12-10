@@ -119,6 +119,7 @@ class FinancieelDagbladScraper(LoginMixin, UnitScraper, DateRangeScraper):
         for image in text_doc.cssselect(".image"):
             image.getparent().remove(image)
 
+        date = datetime.datetime(date.year, date.month, date.day)
         title = text_doc.cssselect("article > h1")[0].text
         section = text_doc.cssselect("article > header > .title")[0].text.strip()
         text = html2text(text_doc.cssselect("main > article > .body"))
