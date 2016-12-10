@@ -17,15 +17,15 @@
 # License along with AmCAT.  If not, see <http://www.gnu.org/licenses/>.  #
 ###########################################################################
 
-from datetime import date
-from urlparse import urljoin
+import datetime
+from urllib import parse
+
 import lxml.html
 import re
-from amcatscraping.article import Article
 
+from amcat.models import Article
 from amcatscraping.tools import setup_logging, parse_form
-from amcatscraping.scraper import (LoginMixin, PropertyCheckMixin,
-                                   UnitScraper, DateRangeScraper)
+from amcatscraping.scraper import LoginMixin, UnitScraper, DateRangeScraper
 
 
 OVERVIEW_URL = "https://login.nrc.nl/overview"
@@ -35,11 +35,8 @@ PUBLISHED_POSTFIX = " (?P<paper>[\w ]+) op (?P<date>[\w ,]+), pagina (?P<page>[\
 PUBLISHED_RE = re.compile(PUBLISHED_PREFIX + PUBLISHED_POSTFIX)
 
 
-class NRCScraper(LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper):
+class NRCScraper(LoginMixin, UnitScraper, DateRangeScraper):
     nrc_version = None
-
-    def __init__(self, *args, **kwargs):
-        super(NRCScraper, self).__init__(*args, **kwargs)
 
     def login(self, username, password):
         login_page = self.session.get(OVERVIEW_URL)
@@ -56,7 +53,7 @@ class NRCScraper(LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper):
         for date in self.dates:
             for doc in self.__getsections(date):
                 for a in doc.cssselect("ul.article-links li > a"):
-                    yield urljoin(a.base_url, a.get('href'))
+                    yield parse.urljoin(a.base_url, a.get('href'))
 
     def __getsections(self, date):
         monthminus = date.month - 1
@@ -64,10 +61,15 @@ class NRCScraper(LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper):
         doc1 = self.session.get_html(url1)
         yield doc1
         for a in doc1.cssselect("ul.main-sections li:not(.active) a.section-link"):
-            yield self.session.get_html(urljoin(a.base_url, a.get("href")))
+            yield self.session.get_html(parse.urljoin(a.base_url, a.get("href")))
 
     def scrape_unit(self, url):
         doc = self.session.get_html(url)
+        text = "\n\n".join([t.text_content() for t in doc.cssselect("em.intro,div.column-left p")])
+
+        if not text:
+            return None
+
         datestr = url.split("/")[7].strip("_")
         location = doc.cssselect("em.location")
         person = doc.cssselect("p.by span.person")
@@ -80,37 +82,33 @@ class NRCScraper(LoginMixin, PropertyCheckMixin, UnitScraper, DateRangeScraper):
         except IndexError:
             pagenr = int(published["page"].split("-")[0])
 
-        
         section_span = doc.cssselect("#Content ul.main-sections li.active span")
         if section_span:
             section = section_span[0].text
         else:
             section = doc.cssselect("#Content .breadcrums a.previous")[0].text
 
-        article = {
-            'date': date(*map(int, [datestr[:4], datestr[4:6], datestr[6:]])),
-            'headline': doc.cssselect("#MainContent h2")[0].text_content(),
-            'section': section,
-            'author': person and person[0].text_content() or None,
-            'text': "\n\n".join([t.text_content() for t in doc.cssselect("em.intro,div.column-left p")]),
-            'pagenr': pagenr,
-            'metastring': {
-                'location': location and location[0].text or None,
-                'subtitle': "\n".join([h3.text_content() for h3 in doc.cssselect("div.column-left h3")]),
-                'published': published
-            }
-        }
+        date = datetime.datetime(*map(int, [datestr[:4], datestr[4:6], datestr[6:]]))
+        title = doc.cssselect("#MainContent h2")[0].text_content().strip() or "-"
 
-        if not article['headline']:
-            article['headline'] = '-'
-        if article['text']:
-            return Article(article)
+        article = Article(date=date, title=title, text=text, url=url)
 
-    _props = {
-        'defaults': {},
-        'required': ['date', 'headline', 'section', 'pagenr', 'text'],
-        'expected': ['author']
-    }
+        author = person and person[0].text_content() or None
+        if author:
+            article.set_property("author", author)
+
+        location = location and location[0].text or None
+        if location:
+            article.set_property("location", location)
+
+        subtitle = "\n".join([h3.text_content() for h3 in doc.cssselect("div.column-left h3")])
+
+        article.set_property("subtitle", subtitle)
+        article.set_property("section", section)
+        article.set_property("pagenr_int", pagenr)
+
+        return article
+
 
 if __name__ == '__main__':
     setup_logging()
