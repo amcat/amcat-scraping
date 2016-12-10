@@ -20,9 +20,9 @@
 import collections
 from datetime import date
 import itertools
-from amcatscraping.article import Article
 
-from amcatscraping.scraper import UnitScraper, DateRangeScraper, LoginMixin, PropertyCheckMixin
+from amcat.models import Article
+from amcatscraping.scraper import UnitScraper, DateRangeScraper, LoginMixin
 from amcatscraping.tools import parse_form, setup_logging
 
 
@@ -37,7 +37,7 @@ def mkdate(string):
     return date(*map(int, string.split("-")))
 
 
-class TelegraafScraper(LoginMixin,PropertyCheckMixin,UnitScraper,DateRangeScraper):
+class TelegraafScraper(LoginMixin, UnitScraper, DateRangeScraper):
     def login(self, username, password):
         self.session.get(WEEK_URL, verify=False)
         form = parse_form(self.session.get_html(LOGIN_URL, verify=False).cssselect("#user-login")[0])
@@ -66,15 +66,13 @@ class TelegraafScraper(LoginMixin,PropertyCheckMixin,UnitScraper,DateRangeScrape
         data = collections.defaultdict(str, **self.session.get(url).json())
         if data.keys() == ["authenticate_url"]:
             raise Exception("Login for Telegraaf failed")
-        
-        article = {
-            'url': url, 'metastring': {}, 'pagenr': pagenr,
-            'section': section, 'date': date,
-            "headline": data.get("headline")
-        }
 
-        if not article['headline']:
+        if not data.get('headline'):
             return None
+
+        article = Article(url=url, title=data.get("headline"), date=date)
+        article.set_property("section", section)
+        article.set_property("pagenr_int", int(pagenr))
 
         body = dict.fromkeys(itertools.chain.from_iterable(data["body"]), "")
 
@@ -84,25 +82,19 @@ class TelegraafScraper(LoginMixin,PropertyCheckMixin,UnitScraper,DateRangeScrape
 
         lead = body.get("lead", "")
         byline = body.get("paragraph") or body.get("byline", "")
-        article['text'] = lead + byline
+        article.text = lead + byline
 
-        if not article['text']:
+        if not article.text:
             return None
 
-        article['metastring'].update({
-            'subheadline': body.get('subheadline'),
-            'media_caption': body.get('media-caption')
-        })
+        if body.get("subheadline"):
+            article.set_property("subheadline", body.get("subheadline"))
 
-        return Article(article)
+        if body.get("media-caption"):
+            article.set_property("mediacaption", body.get("media-caption"))
 
-    _props = {
-        'defaults': {
-            'medium': "De Telegraaf",
-        },
-        'required': ['url', 'pagenr', 'section', 'text', 'date', 'headline'],
-        'expected': []
-    }
+        return article
+
 
 if __name__ == "__main__":
     setup_logging()
