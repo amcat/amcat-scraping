@@ -15,6 +15,30 @@ The scrapers can be run using the `amcatscraping.scrape` module: (see below for 
 python -m amcatscraping.scrape --help
 ```
 
+AmCAT 3.5
+===
+AmCAT 3.5 included the transition from Python 2 to Python 3. Additionally, some fundamental changes in the way it approaches articles have been made. This is an overview of the scrapers currently fixed:
+
+* newspapers.ad
+* newspapers.fd
+* newspapers.nrc
+* newspapers.nrchandelsblad
+* newspapers.nrcnext
+* newspapers.pcm
+* newspapers.telegraaf
+* newspapers.trouw
+* newspapers.volkskrant
+* blogs.geenstijl
+
+Unchecked / not working are:
+
+* forums.hababam
+* forums.marokko
+* forums.phpbb
+* news.fok
+* news.nu
+* newspapers.haaretz
+
 Configuration
 ====
 
