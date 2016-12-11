@@ -25,7 +25,7 @@ import datetime
 import logging
 import itertools
 
-from typing import Iterable, Sequence, List, Optional, Any, Union
+from typing import Iterable, List, Optional, Any, Union
 
 from amcat.models import DateTimeEncoder
 from amcat.tools.toolkit import splitlist
@@ -39,7 +39,7 @@ log = logging.getLogger(__name__)
 
 
 def article_to_json(article: Article):
-    static_fields = article.get_static_fields() - {"id", "project_id", "project", "properties"}
+    static_fields = article.static_fields() - {"id", "project_id", "project", "properties"}
     static_fields = {fn: getattr(article, fn) for fn in static_fields}
     return dict(static_fields, properties=dict(article.get_properties().items()))
 
@@ -413,28 +413,6 @@ class BinarySearchDateRangeScraper(DateRangeScraper, BinarySearchScraper):
 
     def scrape_unit(self, id):
         raise NotImplementedError("scrape_unit() not implemented.")
-
-
-class ContinuousScraper(DateRangeScraper):
-    """Blocks until an article of with a date greater than max_datetime is reached.
-    min_datetime is ignored, but can be used to update articles. Continious scrapers
-    typically don't include comments, but require the user to run update() periodically."""
-    def __init__(self, timeout=60, **kwargs):
-        """@param timeout: (if applicable) check for updates every N seconds"""
-        super(ContinuousScraper, self).__init__(**kwargs)
-        self.timeout = timeout
-
-    def _scrape(self):
-        while True:
-            for article in super(ContinuousScraper, self).scrape():
-                yield article
-            time.sleep(self.timeout)
-
-    def scrape(self):
-        articles = self._scrape()
-        articles = itertools.dropwhile(lambda a: to_date(a.properties["date"]) < self.min_date, articles)
-        articles = itertools.takewhile(lambda a: to_date(a.properties["date"]) <= self.min_date, articles)
-        return articles
 
 
 class LoginMixin(object):

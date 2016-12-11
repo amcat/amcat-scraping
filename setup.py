@@ -31,6 +31,6 @@ setup(
         "docopt",
         "lxml",
         "tabulate",
-        "feedparser"
+        "feedparser", 'redis', 'dateparser', 'iso8601'
     ],
 )

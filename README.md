@@ -29,6 +29,7 @@ AmCAT 3.5 included the transition from Python 2 to Python 3. Additionally, some 
 * newspapers.trouw
 * newspapers.volkskrant
 * blogs.geenstijl
+* news.nu
 
 Unchecked / not working are:
 
@@ -36,7 +37,6 @@ Unchecked / not working are:
 * forums.marokko
 * forums.phpbb
 * news.fok
-* news.nu
 * newspapers.haaretz
 
 Configuration
