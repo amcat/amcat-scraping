@@ -51,9 +51,10 @@ import tabulate
 import uuid
 import errno
 
+from iso8601.iso8601 import parse_date
 from email.utils import formatdate
 from django.core.mail import EmailMultiAlternatives, get_connection
-from amcatscraping.tools import read_date, get_boolean, to_date
+from amcatscraping.tools import get_boolean, to_date
 
 
 JINJA_ENV = jinja2.Environment(loader=jinja2.PackageLoader('amcatscraping', 'templates'))
@@ -93,6 +94,7 @@ def run_single(config, args, scraper_config, scraper_class):
 
     # Store config
     protocol = "https" if config.getboolean("store", "ssl") else "http"
+    scrape_comments = config.getboolean("scrape_comments")
     host_url = "%s://%s:%s" % (protocol, config.get("store", "host"), config.get("store", "port"))
     host_username = config.get("store", "username")
     host_password = config.get("store", "password")
@@ -104,14 +106,14 @@ def run_single(config, args, scraper_config, scraper_class):
             reldate = int(args["--from"])
             min_date = min_date + datetime.timedelta(days=reldate)
         except ValueError:
-            min_date = to_date(read_date(args["--from"]))
+            min_date = to_date(parse_date(args["--from"]))
 
     if args["--to"]:
         try:
             reldate = int(args["--to"])
             max_date = max_date + datetime.timedelta(days=reldate)
         except ValueError:
-            max_date = to_date(read_date(args["--to"]))
+            max_date = to_date(parse_date(args["--to"]))
 
     opts = {
         "project_id": project_id,
@@ -121,6 +123,7 @@ def run_single(config, args, scraper_config, scraper_class):
         "api_password": host_password,
         "username": username,
         "password": password,
+        "scrape_comments": scrape_comments,
         "log_errors": True,
         "min_date": min_date,
         "max_date": max_date,
@@ -219,7 +222,7 @@ def get_logs(date):
 
 def report(config, args):
     date = args.get('--date')
-    date = TODAY if date is None else read_date(date).date()
+    date = TODAY if date is None else parse_date(date).date()
 
     headers = ["label", "timestamp", "narticles", "update", "failed", "uuid"]
     table_data = [[log[h] for h in headers] for log in get_logs(date)]

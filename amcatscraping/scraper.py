@@ -64,7 +64,7 @@ class ArticleTree:
 class Scraper(object):
     publisher = None
 
-    def __init__(self, project_id, articleset_id, batch_size=100, dry_run=False, api_host=None, api_user=None, api_password=None, **kwargs):
+    def __init__(self, project_id, articleset_id, batch_size=100, dry_run=False, api_host=None, api_user=None, api_password=None, scrape_comments=True, **kwargs):
         self.batch_size = batch_size
         self.dry_run = dry_run
 
@@ -74,6 +74,7 @@ class Scraper(object):
         self.api_host = api_host
         self.api_user = api_user
         self.api_password = api_password
+        self.scrape_comments = scrape_comments
 
         if not dry_run:
             self.api = self._api_auth()

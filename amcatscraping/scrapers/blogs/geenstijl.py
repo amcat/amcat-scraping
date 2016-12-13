@@ -21,10 +21,11 @@ from __future__ import print_function, unicode_literals
 import datetime
 import logging
 import requests
+from iso8601 import parse_date
 
 from amcat.models import Article
 from amcatscraping.scraper import UnitScraper, DateRangeScraper, ArticleTree
-from amcatscraping.tools import html2text, read_date
+from amcatscraping.tools import html2text
 from collections import defaultdict
 
 
@@ -96,8 +97,9 @@ class GeenstijlScraper(UnitScraper, DateRangeScraper):
         return article
 
     def _get_comments(self, headline, article_url, doc):
-        for comment in doc.cssselect("#comments article"):
-            yield self._parse_comment(comment, headline, article_url)
+        if self.scrape_comments:
+            for comment in doc.cssselect("#comments article"):
+                yield self._parse_comment(comment, headline, article_url)
 
     def scrape_unit(self, date_and_article_url):
         date, article_url = date_and_article_url
@@ -122,7 +124,7 @@ class GeenstijlScraper(UnitScraper, DateRangeScraper):
             return None
 
         author = footer.text.rsplit("|", 1)[0].strip()
-        timestamp = read_date(article_el[0].cssselect("footer > time")[0].get("datetime"))
+        timestamp = parse_date(article_el[0].cssselect("footer > time")[0].get("datetime"))
         if not title:
             return None
 
