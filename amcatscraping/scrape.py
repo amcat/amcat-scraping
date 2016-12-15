@@ -91,10 +91,10 @@ def run_single(config, args, scraper_config, scraper_class):
     project_id = int(scraper_config["project"])
     username = scraper_config.get("username")
     password = scraper_config.get("password")
+    scrape_comments = scraper_config.get("scrape_comments").lower() in ("y", "yes", "1", "true")
 
     # Store config
     protocol = "https" if config.getboolean("store", "ssl") else "http"
-    scrape_comments = config.getboolean("scrape_comments")
     host_url = "%s://%s:%s" % (protocol, config.get("store", "host"), config.get("store", "port"))
     host_username = config.get("store", "username")
     host_password = config.get("store", "password")

@@ -133,11 +133,13 @@ class FinancieelDagbladScraper(LoginMixin, UnitScraper, DateRangeScraper):
             if author == section:
                 section = "Opinie"
 
-        pdf_url = text_doc.cssselect('form[name="download"]')[0].get("action")
+        download = text_doc.cssselect('form[name="download"]')
+        if download:
+            pdf_url = download[0].get("action")
+            article.set_property("pdf_url", pdf_url)
 
         article.set_property("text_url", text_url)
         article.set_property("image_url", text_url + "?view=img")
-        article.set_property("pdf_url", pdf_url)
         article.set_property("section", section)
 
         return article

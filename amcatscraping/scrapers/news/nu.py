@@ -18,42 +18,30 @@
 ###########################################################################
 import feedparser
 import iso8601
-import redis
 import dateparser
 
-from typing import Iterable
-
 from amcat.models import Article
-from amcatscraping.scraper import UnitScraper
+from amcatscraping.scraper import DeduplicatingUnitScraper
 from amcatscraping.tools import html2text
 
 RSS_URL = "http://www.nu.nl/rss"
 
 
-class NuScraper(UnitScraper):
-    medium = "nu.nl"
+class NuScraper(DeduplicatingUnitScraper):
+    publisher = "nu.nl"
 
     def __init__(self, *args, **kwargs):
         super(NuScraper, self).__init__(*args, **kwargs)
-        self.cache = redis.from_url("redis://127.0.0.1:6379/1")
 
-    def get_cache_key(self):
-        return "nu_scraper_article_ids_{self.project_id}_{self.articleset_id}".format(self=self)
+    def get_deduplicate_key_from_unit(self, unit) -> str:
+        return unit["id"]
 
-    def add_to_cache(self, id: str):
-        self.cache.sadd(self.get_cache_key(), id)
+    def get_deduplicate_key_from_article(self, article: Article) -> str:
+        return article.get_property("nuid")
 
-    def is_saved_article(self, id: str):
-        return self.cache.sismember(self.get_cache_key(), id)
-
-    def save(self, *args, **kwargs) -> Iterable[Article]:
-        for article in super(NuScraper, self).save(*args, **kwargs):
-            yield self.add_to_cache(article.get_property("nuid"))
-
-    def get_units(self):
+    def get_deduplicate_units(self):
         for entry in feedparser.parse(RSS_URL)["entries"]:
-            if not self.is_saved_article(entry["id"]):
-                yield entry
+            yield entry
 
     def get_article_section_text(self, url):
         article_doc = self.session.get_html(url)

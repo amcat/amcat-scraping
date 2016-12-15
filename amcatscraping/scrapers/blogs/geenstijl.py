@@ -24,7 +24,8 @@ import requests
 from iso8601 import parse_date
 
 from amcat.models import Article
-from amcatscraping.scraper import UnitScraper, DateRangeScraper, ArticleTree
+from amcatscraping.scraper import UnitScraper, DateRangeScraper, ArticleTree, \
+    DeduplicatingUnitScraper
 from amcatscraping.tools import html2text
 from collections import defaultdict
 
@@ -52,17 +53,24 @@ def _parse_comment_footer(footer):
     return author, timestamp
 
 
-class GeenstijlScraper(UnitScraper, DateRangeScraper):
+class GeenstijlScraper(DeduplicatingUnitScraper, DateRangeScraper):
     medium = "Geenstijl"
 
     def __init__(self, **kwargs):
-        super(GeenstijlScraper, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.articles = defaultdict(set)
         self.session.encoding = "iso-8859-1"
         # accepteer de cookies
         requests.utils.add_dict_to_cookiejar(self.session.cookies, {"cpc": "10"})
 
-    def get_units(self):
+    def get_deduplicate_key_from_unit(self, unit) -> str:
+        date, article_url = unit
+        return article_url
+
+    def get_deduplicate_key_from_article(self, article: Article) -> str:
+        return article.url
+
+    def get_deduplicate_units(self):
         for date in self.dates:
             day_string = date.strftime("%d-%m-%y")
             

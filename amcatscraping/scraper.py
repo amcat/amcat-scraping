@@ -16,8 +16,11 @@
 # You should have received a copy of the GNU Lesser General Public        #
 # License along with AmCAT.  If not, see <http://www.gnu.org/licenses/>.  #
 ###########################################################################
+import hashlib
 from operator import itemgetter
 
+import functools
+import redis
 import json
 import os
 import time
@@ -203,6 +206,42 @@ class UnitScraper(Scraper):
                 yield article
 
 
+class DeduplicatingUnitScraper(UnitScraper):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.cache = redis.from_url("redis://127.0.0.1:6379/1")
+
+    @functools.lru_cache()
+    def _get_redis_key(self):
+        return "{self.__class__.__name__}_{self.project_id}_{self.articleset_id}".format(self=self)
+
+    def _get_deduplicate_key(self, key: str) -> bytes:
+        bytes_key = key.encode("utf-8")
+        if len(bytes_key) > 16:
+            return hashlib.sha256(bytes_key)[:16]
+        return bytes_key
+
+    def get_deduplicate_key_from_unit(self, unit: Any) -> str:
+        raise NotImplementedError()
+
+    def get_deduplicate_key_from_article(self, article: Article) -> str:
+        raise NotImplementedError()
+
+    def get_deduplicate_units(self):
+        raise NotImplementedError()
+
+    def get_units(self):
+        for unit in self.get_deduplicate_units():
+            key = self.get_deduplicate_key_from_unit(unit)
+            if not self.cache.sismember(self._get_redis_key(), key):
+                yield unit
+
+    def save(self, *args, **kwargs):
+        for article in super(DeduplicatingUnitScraper, self).save(*args, **kwargs):
+            self.cache.sadd(self._get_redis_key(), self.get_deduplicate_key_from_article(article))
+            yield article
+
+
 class DateRangeScraper(Scraper):
     """
     Omits any articles that haven't been published in a given period.
@@ -210,7 +249,7 @@ class DateRangeScraper(Scraper):
     to select data from their resource.
     """
     def __init__(self, min_date, max_date, **kwargs):
-        super(DateRangeScraper, self).__init__(**kwargs)
+        super().__init__(**kwargs)
 
         assert(isinstance(min_date, datetime.date))
         assert(isinstance(max_date, datetime.date))
