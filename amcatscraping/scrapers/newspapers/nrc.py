@@ -31,7 +31,7 @@ from amcatscraping.scraper import LoginMixin, UnitScraper, DateRangeScraper
 OVERVIEW_URL = "https://login.nrc.nl/overview"
 
 PUBLISHED_PREFIX = "Dit artikel werd gepubliceerd in"
-PUBLISHED_POSTFIX = " (?P<paper>[\w ]+) op (?P<date>[\w ,]+), pagina (?P<page>[\w -]+)"
+PUBLISHED_POSTFIX = " (?P<paper>[\.\w ]+) op (?P<date>[\w ,]+), pagina (?P<page>[\w -]+)"
 PUBLISHED_RE = re.compile(PUBLISHED_PREFIX + PUBLISHED_POSTFIX)
 
 
