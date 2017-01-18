@@ -30,7 +30,7 @@ import itertools
 
 from typing import Iterable, List, Optional, Any, Union
 
-from amcat.models import DateTimeEncoder
+from amcat.models import PropertyMappingJSONEncoder
 from amcat.tools.toolkit import splitlist
 from .httpsession import Session
 from .tools import to_date, memoize, open_json_cache
@@ -100,7 +100,7 @@ class Scraper(object):
     def _save(self, articles: List[Article]) -> Iterable[Article]:
         for batch in splitlist(articles, self.batch_size):
             json_data = [article_to_json(a) for a in batch]
-            json_data = json.dumps(json_data, cls=DateTimeEncoder)
+            json_data = json.dumps(json_data, cls=PropertyMappingJSONEncoder)
             new_articles = self.api.create_articles(self.project_id, self.articleset_id, json_data)
             for article, article_dict in zip(batch, new_articles):
                 article.id = article_dict["id"]
@@ -213,7 +213,7 @@ class DeduplicatingUnitScraper(UnitScraper):
 
     @functools.lru_cache()
     def _get_redis_key(self):
-        return "{self.__class__.__name__}_{self.project_id}_{self.articleset_id}".format(self=self)
+        return "amcatscraping_{self.__class__.__name__}_{self.project_id}_{self.articleset_id}".format(self=self)
 
     def _get_deduplicate_key(self, key: str) -> bytes:
         bytes_key = key.encode("utf-8")
