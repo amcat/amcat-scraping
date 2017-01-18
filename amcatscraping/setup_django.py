@@ -21,55 +21,30 @@ This module is a big hack to get "from amcat.models import Article" working. It
 would be nice if we can import settings from amcat at some point (of course, we
 would like to prevent import database settings).
 """
+import amcat
 import django
-import datetime
+import sys
+
+from os.path import dirname, join, abspath, realpath
 
 from django.conf import global_settings
 
-ES_MAPPING_TYPE_PRIMITIVES = {
-    "int": int,
-    "date": datetime.datetime,
-    "num": float,
-    "url": str,
-    "id": str,
-    "text": str,
-    "default": str
-}
+# Figure out where amcat lives, import settings module
+amcat_lib_dir = abspath(join(realpath(dirname(amcat.__file__)), ".."))
+sys.path.insert(0, amcat_lib_dir)
+import settings as amcat_settings
+sys.path.pop(0)
 
-
-ES_MAPPING_TYPES = {
-    'int': {"type": "long"},
-    'date': {"format": "dateOptionalTime", "type": "date"},
-    'num': {"type": "double"},
-    'url': {"index": "not_analyzed", "type": "string"},
-    'id': {"index": "not_analyzed", "type": "string"},
-    'text': {"type": "string"},
-    'default': {"type": "string",
-                 "fields": {"raw":   { "type": "string", "index": "not_analyzed", "ignore_above": 256}}}
-    }
-
-ES_MAPPING = {
-    "properties": {
-        # id / hash / project/set membership
-        "id": ES_MAPPING_TYPES['int'],
-        "sets": ES_MAPPING_TYPES['int'],
-        "hash": ES_MAPPING_TYPES['id'],
-        "parent_hash": ES_MAPPING_TYPES['id'],
-        # article properties
-        "date": ES_MAPPING_TYPES['date'],
-        "title": ES_MAPPING_TYPES['default'],
-        "url": ES_MAPPING_TYPES['url'],
-        "text": ES_MAPPING_TYPES['text'],
-    },
-}
-
-global_settings.ES_MAPPING = ES_MAPPING
-global_settings.ES_MAPPING_TYPES = ES_MAPPING_TYPES
-global_settings.ES_MAPPING_TYPE_PRIMITIVES = ES_MAPPING_TYPE_PRIMITIVES
+# Copy relevant config
+global_settings.ES_MAPPING = amcat_settings.ES_MAPPING
+global_settings.ES_MAPPING_TYPES = amcat_settings.ES_MAPPING_TYPES
+global_settings.ES_MAPPING_TYPE_PRIMITIVES = amcat_settings.ES_MAPPING_TYPE_PRIMITIVES
 global_settings.INSTALLED_APPS += [
     "django.contrib.contenttypes",
     "django.contrib.auth"
 ]
 
+
+# Fire up Django
 django.conf.settings.configure()
 django.setup()
