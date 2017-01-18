@@ -18,6 +18,7 @@
 ###########################################################################
 
 import collections
+import re
 from datetime import date
 import itertools
 
@@ -33,11 +34,16 @@ LOGIN_URL = "https://www.telegraaf.nl/wuz/loginbox?nocache"
 WEEK_URL = "http://www.telegraaf.nl/telegraaf-i/week"
 
 
+AUTHOR_RE = re.compile("^door (?P<author>.+)$")
+
+
 def mkdate(string):
     return date(*map(int, string.split("-")))
 
 
 class TelegraafScraper(LoginMixin, UnitScraper, DateRangeScraper):
+    publisher = "De Telegraaf"
+
     def login(self, username, password):
         self.session.get(WEEK_URL, verify=False)
         form = parse_form(self.session.get_html(LOGIN_URL, verify=False).cssselect("#user-login")[0])
@@ -92,6 +98,15 @@ class TelegraafScraper(LoginMixin, UnitScraper, DateRangeScraper):
 
         if body.get("media-caption"):
             article.set_property("mediacaption", body.get("media-caption"))
+
+        newspaper_id = "/{}/".format(data["newspaper_id"])
+        article.set_property("text_url", article.url.replace("/article/", newspaper_id))
+        article.set_property("image_url", article.url.replace("/article/", newspaper_id) + "/original")
+
+        author_match = AUTHOR_RE.match(article.text.splitlines()[0])
+        if author_match:
+            article.set_property("author", author_match.groupdict()["author"].strip())
+            article.text = "\n".join(article.text.splitlines()[1:]).strip()
 
         return article
 
