@@ -19,8 +19,11 @@
 
 import datetime
 import base64
+import pprint
 import uuid
 import logging
+from typing import Any, Tuple
+
 import pyamf
 
 from pyamf import remoting
@@ -141,13 +144,19 @@ class PCMScraper(LoginMixin, UnitScraper, DateRangeScraper):
                 for art in index['doc']['articles']:
                     if not (art['title'] and art['title'].strip()):
                         continue
-                    yield (index, art)
+
+                    url = "{}?id={}".format(index["doc"]["highresUrl"], art["id"])
+                    yield (index, art, url, date)
+
+    def get_url_and_date_from_unit(self, unit: Any) -> Tuple[str, datetime.date]:
+        index, art, url, date = unit
+        return url, date
 
     def scrape_unit(self, index__art):
-        index, art = index__art
+        index, art, url, date = index__art
         date = index["date"]
 
-        article = Article()
+        article = Article(url=url)
         article.set_property('author', art['author'][:100] if art['author'] else '')
         article.set_property('title', art['title'])
         article.set_property('text', "\n\n".join([el['text'] for el in art['bodyElements']]))

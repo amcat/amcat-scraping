@@ -18,8 +18,10 @@
 ###########################################################################
 
 import datetime
+from typing import Tuple
 from urllib import parse
 
+import collections
 import lxml.html
 import re
 
@@ -33,6 +35,8 @@ OVERVIEW_URL = "https://login.nrc.nl/overview"
 PUBLISHED_PREFIX = "Dit artikel werd gepubliceerd in"
 PUBLISHED_POSTFIX = " (?P<paper>[\.\w ]+) op (?P<date>[\w ,]+), pagina (?P<page>[\w -]+)"
 PUBLISHED_RE = re.compile(PUBLISHED_PREFIX + PUBLISHED_POSTFIX)
+
+ArticleTuple = collections.namedtuple("ArticleTuple", ["url", "date"])
 
 
 class NRCScraper(LoginMixin, UnitScraper, DateRangeScraper):
@@ -53,7 +57,10 @@ class NRCScraper(LoginMixin, UnitScraper, DateRangeScraper):
         for date in self.dates:
             for doc in self.__getsections(date):
                 for a in doc.cssselect("ul.article-links li > a"):
-                    yield parse.urljoin(a.base_url, a.get('href'))
+                    yield ArticleTuple(parse.urljoin(a.base_url, a.get('href')), date)
+
+    def get_url_and_date_from_unit(self, unit: ArticleTuple) -> Tuple[str, datetime.date]:
+        return unit
 
     def __getsections(self, date):
         monthminus = date.month - 1
@@ -63,7 +70,8 @@ class NRCScraper(LoginMixin, UnitScraper, DateRangeScraper):
         for a in doc1.cssselect("ul.main-sections li:not(.active) a.section-link"):
             yield self.session.get_html(parse.urljoin(a.base_url, a.get("href")))
 
-    def scrape_unit(self, url):
+    def scrape_unit(self, unit):
+        url = unit.url
         doc = self.session.get_html(url)
         text = "\n\n".join([t.text_content() for t in doc.cssselect("em.intro,div.column-left p")])
 

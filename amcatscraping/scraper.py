@@ -20,6 +20,7 @@ import hashlib
 from operator import itemgetter
 
 import functools
+
 import redis
 import json
 import os
@@ -28,10 +29,9 @@ import datetime
 import logging
 import itertools
 
-from typing import Iterable, List, Optional, Any, Union
+from typing import Iterable, List, Optional, Any, Union, Tuple, Set
 
 from amcat.models import PropertyMappingJSONEncoder
-from amcat.tools.toolkit import splitlist
 from .httpsession import Session
 from .tools import to_date, memoize, open_json_cache
 from amcatclient.amcatclient import AmcatAPI, APIError
@@ -67,7 +67,23 @@ class ArticleTree:
 class Scraper(object):
     publisher = None
 
-    def __init__(self, project_id, articleset_id, batch_size=100, dry_run=False, api_host=None, api_user=None, api_password=None, scrape_comments=True, **kwargs):
+    def __init__(self, project_id: int, articleset_id: int, batch_size=100, dry_run=False,
+                 api_host=None, api_user=None, api_password=None, scrape_comments=True,
+                 deduplicate_on_url=True, **kwargs):
+        """
+
+
+        @param project_id:
+        @param articleset_id:
+        @param batch_size:
+        @param dry_run:
+        @param api_host:
+        @param api_user:
+        @param api_password:
+        @param scrape_comments:
+        @param deduplicate_on_url:
+        @param kwargs:
+        """
         self.batch_size = batch_size
         self.dry_run = dry_run
 
@@ -79,13 +95,11 @@ class Scraper(object):
         self.api_password = api_password
         self.scrape_comments = scrape_comments
 
-        if not dry_run:
-            self.api = self._api_auth()
-        else:
-            self.api = None
-
+        self.api = self._api_auth()
         self.session = Session()
         self.setup_session()
+        self.deduplicate_on_url = deduplicate_on_url
+        self.duplicate_count = 0
 
     def _api_auth(self) -> AmcatAPI:
         return AmcatAPI(self.api_host, self.api_user, self.api_password)
@@ -98,13 +112,12 @@ class Scraper(object):
         raise NotImplementedError("scrape() not implemented.")
 
     def _save(self, articles: List[Article]) -> Iterable[Article]:
-        for batch in splitlist(articles, self.batch_size):
-            json_data = [article_to_json(a) for a in batch]
-            json_data = json.dumps(json_data, cls=PropertyMappingJSONEncoder)
-            new_articles = self.api.create_articles(self.project_id, self.articleset_id, json_data)
-            for article, article_dict in zip(batch, new_articles):
-                article.id = article_dict["id"]
-                yield article
+        json_data = [article_to_json(a) for a in articles]
+        json_data = json.dumps(json_data, cls=PropertyMappingJSONEncoder)
+        new_articles = self.api.create_articles(self.project_id, self.articleset_id, json_data)
+        for article, article_dict in zip(articles, new_articles):
+            article.id = article_dict["id"]
+            yield article
 
     def save(self, articles: List[Article], tries=5, timeout=15) -> Iterable[Article]:
         """
@@ -146,6 +159,28 @@ class Scraper(object):
         """Space to do something with the unsaved articles that the scraper provided"""
         return articles
 
+    @functools.lru_cache()
+    def get_urls(self, date: datetime.date) -> Set[str]:
+        return set(map(itemgetter("url"), self.api.list_articles(
+            project=self.project_id,
+            articleset=self.articleset_id,
+            on_date=date.isoformat(),
+            minimal=1,
+            col=["url"]
+        )))
+
+    def deduplicate(self, articles: Iterable[Article]) -> Iterable[Article]:
+        """Given a number of articles, return those not yet present in db based on a set of
+        properties specified in the scraper's constructor."""
+        if self.deduplicate_on_url:
+            for article in articles:
+                if article.url not in self.get_urls(article.date.date()):
+                    yield article
+                else:
+                    self.duplicate_count += 1
+        else:
+            yield from articles
+
     def process_tree(self, article_tree: ArticleTree, parent_hash=None) -> Iterable[Article]:
         article, children = article_tree
 
@@ -181,7 +216,7 @@ class Scraper(object):
 
     def run(self) -> List[Article]:
         articles = list(self._run())
-        log.info("Saved a total of {alen} articles.".format(alen=len(articles)))
+        log.info("Saved a total of {alen} articles ({dups} duplicates filtered).".format(alen=len(articles), dups=self.duplicate_count))
         return articles
 
 
@@ -201,12 +236,31 @@ class UnitScraper(Scraper):
         return None
 
     def scrape(self) -> Iterable[Union[Article, ArticleTree]]:
-        for article in map(self.scrape_unit, self.get_units()):
+        for unit in self.get_units():
+            if self.deduplicate_on_url:
+                try:
+                    url, date = self.get_url_and_date_from_unit(unit)
+                except NotImplementedError:
+                    pass
+                else:
+                    if url in self.get_urls(date):
+                        # Duplicate detected
+                        self.duplicate_count += 1
+                        continue
+
+            article = self.scrape_unit(unit)
             if article is not None:
                 yield article
 
+    def get_url_and_date_from_unit(self, unit: Any) -> Tuple[str, datetime.date]:
+        raise NotImplementedError("Subclasses should implement get_url_and_date_from_unit()")
+
 
 class DeduplicatingUnitScraper(UnitScraper):
+    """
+    Deduplicate article based on arbitrary properties on a unit. This will not query the AmCAT
+    database to find duplicates, but uses a local cache (Redis) instead.
+    """
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.cache = redis.from_url("redis://127.0.0.1:6379/1")
@@ -235,6 +289,8 @@ class DeduplicatingUnitScraper(UnitScraper):
             key = self.get_deduplicate_key_from_unit(unit)
             if not self.cache.sismember(self._get_redis_key(), key):
                 yield unit
+            else:
+                self.duplicate_count += 1
 
     def save(self, *args, **kwargs):
         for article in super(DeduplicatingUnitScraper, self).save(*args, **kwargs):

@@ -23,6 +23,8 @@ import re
 import itertools
 
 import collections
+from typing import Tuple
+
 import lxml.html
 
 from urllib import parse
@@ -110,6 +112,9 @@ class FinancieelDagbladScraper(LoginMixin, UnitScraper, DateRangeScraper):
         pages = map(sorted, pages)
         return itertools.chain.from_iterable(pages)
 
+    def get_url_and_date_from_unit(self, unit: ArticleTuple) -> Tuple[str, datetime.date]:
+        return unit.url, unit.date
+
     def scrape_unit(self, article_info: ArticleTuple):
         date, page_num, url = article_info
         text_url = strip_query(self.session.get_redirected_url(url))
@@ -124,7 +129,7 @@ class FinancieelDagbladScraper(LoginMixin, UnitScraper, DateRangeScraper):
         section = text_doc.cssselect("article > header > .title")[0].text.strip()
         text = html2text(text_doc.cssselect("main > article > .body"))
 
-        article = Article(title=title, date=date, text=text, url=text_url)
+        article = Article(title=title, date=date, text=text, url=url)
 
         author_a = text_doc.cssselect("article .author a")
         if author_a:

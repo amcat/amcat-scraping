@@ -21,6 +21,9 @@ import collections
 import re
 from datetime import date
 import itertools
+from typing import Tuple
+
+import datetime
 
 from amcat.models import Article
 from amcatscraping.scraper import UnitScraper, DateRangeScraper, LoginMixin
@@ -60,6 +63,9 @@ class TelegraafScraper(LoginMixin, UnitScraper, DateRangeScraper):
                 for article_id in page['articles']:
                     section = [s['title'] for s in paper['sections'] if page['page_number'] in s['pages']][0]
                     yield ArticleTuple(article_id, page['page_number'], section, mkdate(paper['date']))
+
+    def get_url_and_date_from_unit(self, unit: ArticleTuple) -> Tuple[str, datetime.date]:
+        return ARTICLE_URL.format(article_id=unit.article_id), unit.date
 
     def scrape_unit(self, article):
         article_id, pagenr, section, date = article

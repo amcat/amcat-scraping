@@ -26,13 +26,14 @@ Usage:
   scrape.py -h | --help
 
 Options:
-  -h --help        Show this screen.
-  --from=<date>    Scrape articles from date (default: today)
-  --to=<date>      Scrape articles up to and including date (default: today)
-  --dry-run        Do not commit to database
-  --batch-size=<n> If running in batched mode, this determines the batch size. For continuous
-                   scrapers a low value is suitable for "real-time" purposes (default: 100).
-  --update         Update comment threads of existing articles
+  -h --help                Show this screen.
+  --from=<date>            Scrape articles from date (default: today)
+  --to=<date>              Scrape articles up to and including date (default: today)
+  --dry-run                Do not commit to database
+  --no-deduplicate-on-url  Do not dedpulicate based on URL
+  --batch-size=<n>         If running in batched mode, this determines the batch size. For continuous
+                           scrapers a low value is suitable for "real-time" purposes (default: 100).
+  --update                 Update comment threads of existing articles
 
 """
 import amcatscraping.setup_django
@@ -128,6 +129,7 @@ def run_single(config, args, scraper_config, scraper_class):
         "min_date": min_date,
         "max_date": max_date,
         "dry_run": args["--dry-run"],
+        "deduplicate_on_url": not args["--no-deduplicate-on-url"],
         "batch_size": int(args.get("--batch-size") or 100)
     }
 
