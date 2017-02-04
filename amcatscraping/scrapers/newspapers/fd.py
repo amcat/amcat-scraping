@@ -126,9 +126,9 @@ class FinancieelDagbladScraper(LoginMixin, UnitScraper, DateRangeScraper):
 
         date = datetime.datetime(date.year, date.month, date.day)
         title = text_doc.cssselect("article > h1")[0].text
-        section = text_doc.cssselect("article > header > .title")[0].text.strip()
-        text = html2text(text_doc.cssselect("main > article > .body"))
 
+        section = text_doc.cssselect("article > header > .title")[0].text
+        text = html2text(text_doc.cssselect("main > article > .body"))
         article = Article(title=title, date=date, text=text, url=url)
 
         author_a = text_doc.cssselect("article .author a")
@@ -145,7 +145,9 @@ class FinancieelDagbladScraper(LoginMixin, UnitScraper, DateRangeScraper):
 
         article.set_property("text_url", text_url)
         article.set_property("image_url", text_url + "?view=img")
-        article.set_property("section", section)
+
+        if section:
+            article.set_property("section", section.strip())
 
         return article
 
