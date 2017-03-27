@@ -16,17 +16,15 @@
 # You should have received a copy of the GNU Lesser General Public        #
 # License along with AmCAT.  If not, see <http://www.gnu.org/licenses/>.  #
 ###########################################################################
+import lxml.html
+import collections
+import itertools
 import datetime
 import logging
 import re
 
-import itertools
 
-import collections
 from typing import Tuple
-
-import lxml.html
-
 from urllib import parse
 
 from amcat.models import Article
@@ -126,17 +124,24 @@ class FinancieelDagbladScraper(LoginMixin, UnitScraper, DateRangeScraper):
 
         date = datetime.datetime(date.year, date.month, date.day)
         title = text_doc.cssselect("article > h1")[0].text
-
-        section = text_doc.cssselect("article > header > .title")[0].text
         text = html2text(text_doc.cssselect("main > article > .body"))
+
         article = Article(title=title, date=date, text=text, url=url)
 
-        author_a = text_doc.cssselect("article .author a")
-        if author_a:
-            author = author_a[0].text.strip()
+        if text_doc.cssselect("article > header.themed"):
+            # New headers style
+            author = text_doc.cssselect("article > header .author")[0].text
+            section = text_doc.cssselect("article > header .title")[0].text
             article.set_property("author", author)
-            if author == section:
-                section = "Opinie"
+        else:
+            # Old header style
+            section = text_doc.cssselect("article > header > .title")[0].text
+            author_a = text_doc.cssselect("article .author a")
+            if author_a:
+                author = author_a[0].text.strip()
+                article.set_property("author", author)
+                if author == section:
+                    section = "Opinie"
 
         download = text_doc.cssselect('form[name="download"]')
         if download:
