@@ -56,6 +56,12 @@ KRANT_URL = parse.urljoin(BASE_URL, "/krant/{year}/{month:02d}/{day:02d}")
 ArticleTuple = collections.namedtuple("ArticleTuple", ["date", "page_num", "url"])
 
 
+# URLs in this set return strange (one-off?) errors
+URL_IGNORE = {
+    "https://fd.nl/HFD_20170502_0_017_013"
+}
+
+
 def strip_query(url: str) -> str:
     return parse.urljoin(url, parse.urlparse(url).path)
 
@@ -66,6 +72,7 @@ class FinancieelDagbladScraper(LoginMixin, UnitScraper, DateRangeScraper):
     def __init__(self, *args, **kwargs):
         super(FinancieelDagbladScraper, self).__init__(*args, **kwargs)
         self.rxst = None
+        self.session.sleep = 1
 
     def login(self, username, password):
         # Set right cookies
@@ -115,6 +122,10 @@ class FinancieelDagbladScraper(LoginMixin, UnitScraper, DateRangeScraper):
 
     def scrape_unit(self, article_info: ArticleTuple):
         date, page_num, url = article_info
+
+        if url in URL_IGNORE:
+            return
+
         text_url = strip_query(self.session.get_redirected_url(url))
 
         text_doc = self.session.get_html(text_url)

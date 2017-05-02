@@ -27,6 +27,7 @@ class Session(requests.Session):
     """Provides a HTTP session, HTML parsing and a few convenience methods"""
     def __init__(self):
         super(Session, self).__init__()
+        self.sleep = 0
         self.encoding = "utf-8"
         self.headers.update({
             "User-Agent": "Mozilla/5.0 (Windows NT 6.3; rv:36.0) Gecko/20100101 Firefox/36.0"
@@ -39,9 +40,12 @@ class Session(requests.Session):
         return result
 
     def get_redirected_url(self, link, **kwargs):
-        return self.get(link, allow_redirects=False, **kwargs).headers["Location"]
+        response = self.get(link, allow_redirects=False, **kwargs)
+        return response.headers["Location"]
 
     def get(self, link, tries=3, **kwargs):
+        time.sleep(self.sleep)
+
         try:
             return super(Session, self).get(link.strip(), **kwargs)
         except Exception:
