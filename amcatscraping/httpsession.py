@@ -23,6 +23,12 @@ import requests
 import time
 
 
+class RedirectError(Exception):
+    def __init__(self, status_code, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.status_code = status_code
+
+
 class Session(requests.Session):
     """Provides a HTTP session, HTML parsing and a few convenience methods"""
     def __init__(self):
@@ -41,6 +47,8 @@ class Session(requests.Session):
 
     def get_redirected_url(self, link, **kwargs):
         response = self.get(link, allow_redirects=False, **kwargs)
+        if response.status_code != 302:
+            raise RedirectError(response.status_code, "Response did not return 302, but {} for {}.".format(response.status_code, link))
         return response.headers["Location"]
 
     def get(self, link, tries=3, **kwargs):
