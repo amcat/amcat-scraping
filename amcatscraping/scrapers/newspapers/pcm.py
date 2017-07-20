@@ -160,7 +160,7 @@ class PCMScraper(LoginMixin, UnitScraper, DateRangeScraper):
         article.set_property('author', art['author'][:100] if art['author'] else '')
         article.set_property('title', art['title'])
         article.set_property('text', "\n\n".join([el['text'] for el in art['bodyElements']]))
-        article.set_property('section', index['section'])
+        article.set_property('section', index['section'] or "NOSECTION")
         article.set_property('pagenr_int', index['pagenr'])
         article.set_property('date', datetime.datetime(date.year, date.month, date.day))
 
