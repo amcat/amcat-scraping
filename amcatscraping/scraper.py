@@ -90,12 +90,18 @@ class Scraper(object):
         self.project_id = project_id
         self.articleset_id = articleset_id
 
+        self.no_api = False # Debugging switch
         self.api_host = api_host
         self.api_user = api_user
         self.api_password = api_password
         self.scrape_comments = scrape_comments
 
-        self.api = self._api_auth()
+        if self.no_api:
+            self.api = None
+            self.dry_run = True
+        else:
+            self.api = self._api_auth()
+
         self.session = Session()
         self.setup_session()
         self.deduplicate_on_url = deduplicate_on_url
@@ -161,6 +167,9 @@ class Scraper(object):
 
     @functools.lru_cache()
     def get_urls(self, date: datetime.date) -> Set[str]:
+        if self.no_api:
+            return set()
+
         return set(map(itemgetter("url"), self.api.list_articles(
             project=self.project_id,
             articleset=self.articleset_id,

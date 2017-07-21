@@ -17,17 +17,25 @@
 # License along with AmCAT.  If not, see <http://www.gnu.org/licenses/>.  #
 ###########################################################################
 
-import collections
-import re
-from datetime import date
+import logging
 import itertools
+import collections
+import datetime
+import time
+import re
+
+from datetime import date
+from selenium import webdriver
 from typing import Tuple
 
-import datetime
+from selenium.common.exceptions import NoSuchElementException
+from selenium.webdriver.common.keys import Keys
 
 from amcat.models import Article
 from amcatscraping.scraper import UnitScraper, DateRangeScraper, LoginMixin
 from amcatscraping.tools import parse_form, setup_logging
+
+log = logging.getLogger(__name__)
 
 
 ArticleTuple = collections.namedtuple("Article", ["article_id", "pagenr", "section", "date"])
@@ -47,12 +55,66 @@ def mkdate(string):
 class TelegraafScraper(LoginMixin, UnitScraper, DateRangeScraper):
     publisher = "De Telegraaf"
 
+    def __init__(self, username, password, **kwargs):
+        super().__init__(username, password, **kwargs)
+
+    def wait(self, css_selector, timeout=30, visible=True):
+        start = datetime.datetime.now()
+
+        while True:
+            try:
+                element = self.browser.find_element_by_css_selector(css_selector)
+            except NoSuchElementException:
+                if (datetime.datetime.now() - start).total_seconds() > timeout:
+                    raise
+            else:
+                if not visible:
+                    return element
+                elif element.is_displayed():
+                    return element
+
+            time.sleep(0.5)
+
     def login(self, username, password):
-        self.session.get(WEEK_URL, verify=False)
-        form = parse_form(self.session.get_html(LOGIN_URL, verify=False).cssselect("#user-login")[0])
-        form.update({"name": username, "pass": password})
-        self.session.headers.update({"Referer": LOGIN_URL})
-        return "close-iframe" in self.session.post(LOGIN_URL, form).url
+        # In the Telegraaf's eternal search for quality, they decided to rely on
+        # complicated inter-iframe communication and javascript logic to generate
+        # cookies needed to fetch articles. We therefore simulate logging in and
+        # reading an article with a real browser. We then steal them cookies and
+        # use it for normal scraping.
+        log.info("Starting Firefox..")
+        self.browser = webdriver.Firefox()
+
+        try:
+            self.browser.set_window_size(1920, 1080)
+            log.info("Accepting cookies on telegraaf.nl..")
+            self.browser.get('http://telegraaf.nl/')
+            self.browser.implicitly_wait(30)
+            self.wait(".CookiesOK").click()
+            log.info("Selecting first article..")
+            self.browser.get("https://www.telegraaf.nl/telegraaf-i/")
+            self.wait(".newspapers > li").click()
+            self.wait(".article > a").click()
+            log.info("Logging in..")
+            self.browser.switch_to.frame(self.wait("iframe"))
+            self.wait("a[ci=login]").click()
+            self.browser.switch_to.default_content()
+            self.browser.switch_to.frame(self.wait(".tglogin-overlay-window__iframe"))
+            self.wait("#email").send_keys(self.username)
+            self.wait("#password").send_keys(self.password)
+            self.wait("#password").send_keys(Keys.RETURN)
+            self.browser.switch_to.default_content()
+            log.info("Waiting for article to load..")
+            self.wait("#article")
+
+            log.info("Copying cookies..")
+            for cookie in self.browser.get_cookies():
+                cookie.pop("expiry")
+                cookie.pop("httpOnly")
+                self.session.cookies.set(**cookie)
+
+            return True
+        finally:
+            self.browser.quit()
 
     def get_units(self):
         data = self.session.get("http://www.telegraaf.nl/telegraaf-i/newspapers").json()
@@ -76,7 +138,7 @@ class TelegraafScraper(LoginMixin, UnitScraper, DateRangeScraper):
         url = ARTICLE_URL.format(article_id=article_id)
 
         data = collections.defaultdict(str, **self.session.get(url).json())
-        if data.keys() == ["authenticate_url"]:
+        if list(data.keys()) == ["authenticate_url"]:
             raise Exception("Login for Telegraaf failed")
 
         if not data.get('headline'):
