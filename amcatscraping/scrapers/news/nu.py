@@ -66,7 +66,12 @@ class NuScraper(DeduplicatingUnitScraper):
 
     def scrape_unit(self, entry):
         article = Article()
-        section, text = self.get_article_section_text(entry["link"])
+
+        try:
+            section, text = self.get_article_section_text(entry["link"])
+        except IndexError:
+            return None
+
         article.set_property("nuid", entry["id"])
         article.set_property("title", entry["title"])
         article.set_property("date", self.parse_date(str(entry["published"])))
