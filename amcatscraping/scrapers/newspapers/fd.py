@@ -143,7 +143,8 @@ class FinancieelDagbladScraper(LoginMixin, UnitScraper, DateRangeScraper):
             article.set_property("author", author)
         else:
             # Old header style
-            section = text_doc.cssselect("article > header > .title")[0].text
+            section = text_doc.cssselect("article > header > .title")
+            section = section[0].text if section else "NOSECTION"
             author_a = text_doc.cssselect("article .author a")
             if author_a:
                 author = author_a[0].text.strip()
