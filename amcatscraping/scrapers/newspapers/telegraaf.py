@@ -101,8 +101,7 @@ class TelegraafScraper(LoginMixin, UnitScraper, DateRangeScraper):
             time.sleep(5)
             self.wait(".js-link-username")
             log.info("Waiting for article to load..")
-            self.wait(".article > a").click()
-            self.wait("#article")
+            self.wait(".pages > .page > .article")
 
             log.info("Copying cookies..")
             for cookie in self.browser.get_cookies():
