@@ -86,14 +86,11 @@ class TelegraafScraper(LoginMixin, UnitScraper, DateRangeScraper):
 
         try:
             self.browser.set_window_size(1920, 1080)
-            log.info("Accepting cookies on telegraaf.nl..")
-            self.browser.get('http://telegraaf.nl/')
-            self.browser.implicitly_wait(30)
-            self.wait(".CookiesOK").click()
             log.info("Selecting first article..")
             self.browser.get("https://www.telegraaf.nl/telegraaf-i/")
             self.wait(".newspapers > li").click()
             log.info("Logging in..")
+            time.sleep(5)
             self.wait(".js-link-login > a").click()
             self.browser.switch_to.frame(self.wait(".tglogin-overlay-window__iframe"))
             self.wait("#email").send_keys(self.username)
@@ -101,6 +98,7 @@ class TelegraafScraper(LoginMixin, UnitScraper, DateRangeScraper):
             self.wait("#password").send_keys(Keys.RETURN)
             self.browser.switch_to.default_content()
             log.info("Wait for log in refresh..")
+            time.sleep(5)
             self.wait(".js-link-username")
             log.info("Waiting for article to load..")
             self.wait(".article > a").click()
