@@ -41,7 +41,7 @@ ARTICLE_URL_RE = re.compile("""
     (?P<year>\d{4})
     (?P<month>\d{2})
     (?P<day>\d{2})
-    _0_
+    _\d+_
     (?P<page_num>\d{3})
     _
     (?P<article_num>\d{3})
@@ -131,7 +131,11 @@ class FinancieelDagbladScraper(LoginMixin, UnitScraper, DateRangeScraper):
             image.getparent().remove(image)
 
         date = datetime.datetime(date.year, date.month, date.day)
-        title = text_doc.cssselect("article > h1")[0].text
+        try:
+            title = text_doc.cssselect("article > h1")[0].text
+        except:
+            return None
+
         text = html2text(text_doc.cssselect("main > article > .body"))
 
         article = Article(title=title, date=date, text=text, url=url)
