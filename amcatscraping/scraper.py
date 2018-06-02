@@ -106,12 +106,16 @@ class Scraper(object):
         self.setup_session()
         self.deduplicate_on_url = deduplicate_on_url
         self.duplicate_count = 0
+        self.flush_flag = False
 
     def _api_auth(self) -> AmcatAPI:
         return AmcatAPI(self.api_host, self.api_user, self.api_password)
 
     def setup_session(self):
         pass
+
+    def set_flush_flag(self):
+        self.flush_flag = True
 
     def scrape(self) -> Iterable[Union[Article, ArticleTree]]:
         """Scrape the target resource and return a sequence of article dicts"""
@@ -136,7 +140,7 @@ class Scraper(object):
         """
         if self.dry_run:
             log.info("Scraper returned %s articles (not saving due to --dry-run)", len(articles))
-            return range(len(articles))
+            return articles
 
         log.info("Saving {alen} articles..".format(alen=len(articles)))
 
@@ -214,10 +218,11 @@ class Scraper(object):
             # Flatten tree, add to save queue
             save_queue.extend(self.process_tree(article_tree, article_tree.article.parent_hash))
 
-            # Save if we've collected enough articles
-            if len(save_queue) >= self.batch_size:
+            # Save if we've collected enough articles or if we're forced to flush
+            if len(save_queue) >= self.batch_size or self.flush_flag:
                 yield from self.save(save_queue)
                 save_queue.clear()
+                self.flush_flag = False
 
         # Save all others
         if save_queue:
