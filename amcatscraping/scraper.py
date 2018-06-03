@@ -315,7 +315,8 @@ class DeduplicatingUnitScraper(UnitScraper):
 
     def save(self, *args, **kwargs):
         for article in super(DeduplicatingUnitScraper, self).save(*args, **kwargs):
-            self.cache.sadd(self._get_redis_key(), self.get_deduplicate_key_from_article(article))
+            if not self.dry_run:
+                self.cache.sadd(self._get_redis_key(), self._get_deduplicate_key_from_article(article))
             yield article
 
 
