@@ -284,11 +284,17 @@ class DeduplicatingUnitScraper(UnitScraper):
     def _get_redis_key(self):
         return "amcatscraping_{self.__class__.__name__}_{self.project_id}_{self.articleset_id}".format(self=self)
 
-    def _get_deduplicate_key(self, key: str) -> bytes:
+    def _hash_key(self, key: str) -> bytes:
         bytes_key = key.encode("utf-8")
         if len(bytes_key) > 16:
-            return hashlib.sha256(bytes_key)[:16]
+            return hashlib.sha256(bytes_key).digest()[:16]
         return bytes_key
+
+    def _get_deduplicate_key_from_unit(self, unit: any) -> bytes:
+        return self._hash_key(self.get_deduplicate_key_from_unit(unit))
+
+    def _get_deduplicate_key_from_article(self, article: Article) -> str:
+        return self._hash_key(self.get_deduplicate_key_from_article(article))
 
     def get_deduplicate_key_from_unit(self, unit: Any) -> str:
         raise NotImplementedError()
@@ -301,7 +307,7 @@ class DeduplicatingUnitScraper(UnitScraper):
 
     def get_units(self):
         for unit in self.get_deduplicate_units():
-            key = self.get_deduplicate_key_from_unit(unit)
+            key = self._get_deduplicate_key_from_unit(unit)
             if not self.cache.sismember(self._get_redis_key(), key):
                 yield unit
             else:
