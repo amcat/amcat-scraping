@@ -147,7 +147,7 @@ class GenericScraper(DeduplicatingUnitScraper):
         text = html2text(article_html)
         short_title = doc.short_title()
 
-        article = Article(date=self.now, title=short_title, text=text)
+        article = Article(date=self.now, title=short_title, text=text, url=url)
 
         return article
 
