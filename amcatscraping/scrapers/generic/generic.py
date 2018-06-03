@@ -116,9 +116,13 @@ class GenericScraper(DeduplicatingUnitScraper):
         self.adblocker = AdRemover(BLOCKLIST)
         self.publisher = self.options["publisher"]
         self.now = datetime.datetime.now()
+        self.remove_elements = self.options.get("remove_elements")
 
     def get_html(self, url, *args, **kwargs):
         doc = self.session.get_html(url, *args, **kwargs)
+        if self.remove_elements:
+            for element in doc.cssselect(self.remove_elements):
+                element.getparent().remove(element)
         if self.adbock_enabled:
             self.adblocker.remove_ads(doc)
         return doc
