@@ -133,6 +133,16 @@ def run_single(config, args, scraper_config, scraper_class):
         "batch_size": int(args.get("--batch-size") or 100)
     }
 
+    raw_opts = dict(scraper_config)
+    for opt in opts.keys():
+        if opt in raw_opts:
+            del raw_opts[opt]
+
+    for opt in ("username", "password", "articleset", "project", "class", "is_absolute_classpath"):
+        if opt in raw_opts:
+            del raw_opts[opt]
+
+    opts["options"] = raw_opts
     scraper = scraper_class(**opts)
     method = "run_update" if args["--update"] else "run"
 

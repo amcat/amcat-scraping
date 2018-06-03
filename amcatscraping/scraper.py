@@ -69,7 +69,7 @@ class Scraper(object):
 
     def __init__(self, project_id: int, articleset_id: int, batch_size=100, dry_run=False,
                  api_host=None, api_user=None, api_password=None, scrape_comments=True,
-                 deduplicate_on_url=True, **kwargs):
+                 deduplicate_on_url=True, options=None, **kwargs):
         """
 
 
@@ -95,6 +95,7 @@ class Scraper(object):
         self.api_user = api_user
         self.api_password = api_password
         self.scrape_comments = scrape_comments
+        self.options = options or {}
 
         if self.no_api:
             self.api = None
