@@ -53,6 +53,9 @@ MEDIUMS = [
     "Landelijke Media G2018"
 ]
 
+class NotVisible(Exception):
+    pass
+
 class CoostoScraper(LoginMixin, DeduplicatingUnitScraper):
     publisher = None # Will be set by scraper
 
@@ -64,16 +67,20 @@ class CoostoScraper(LoginMixin, DeduplicatingUnitScraper):
         start = datetime.datetime.now()
 
         while True:
+            seconds_forgone = (datetime.datetime.now() - start).total_seconds()       
+
             try:
                 element = self.browser.find_element(by, selector)
             except NoSuchElementException:
-                if (datetime.datetime.now() - start).total_seconds() > timeout:
+                if seconds_forgone > timeout:
                     raise
             else:
                 if not visible:
                     return element
                 elif element.is_displayed():
                     return element
+                elif seconds_forgone > timeout:
+                    raise NotVisible("Element present, but not visible: {}".format(selector))
 
             time.sleep(0.5)
 
@@ -136,14 +143,19 @@ class CoostoScraper(LoginMixin, DeduplicatingUnitScraper):
             self.browser.set_window_size(1920, 3000)
             log.info("Logging in on Coosto..")
             self.browser.get(LOGIN_URL)
+            log.info("Sending username..")
             self.wait("#username").send_keys(self.username)
+            log.info("Sending password..")
             self.wait("#password").send_keys(self.password)
+            log.info("OK..")
             self.wait('button[type="submit"]').click()
 
             # Logout other users if necessary:
             try:
                 self.wait(".usermessage", timeout=5)
             except NoSuchElementException:
+                pass
+            except NotVisible:
                 pass
             else:
                 self.wait(".flat_buttons > a").click()
