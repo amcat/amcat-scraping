@@ -28,8 +28,13 @@ import time
 import datetime
 import logging
 import itertools
+import atexit
 
 from typing import Iterable, List, Optional, Any, Union, Tuple, Set
+
+from selenium import webdriver
+from selenium.common.exceptions import NoSuchElementException
+from selenium.webdriver.common.by import By
 
 from amcat.models import PropertyMappingJSONEncoder
 from .httpsession import Session
@@ -39,7 +44,6 @@ from amcat.models import Article
 
 
 log = logging.getLogger(__name__)
-
 
 def article_to_json(article: Article):
     static_fields = article.static_fields() - {"id", "project_id", "project", "properties"}
@@ -531,6 +535,53 @@ class BinarySearchDateRangeScraper(DateRangeScraper, BinarySearchScraper):
 
     def scrape_unit(self, id):
         raise NotImplementedError("scrape_unit() not implemented.")
+
+
+def quit_browser(browser):
+    try:
+        browser.quit()
+    except:
+        pass
+
+
+class NotVisible(Exception):
+    pass
+
+
+class SeleniumMixin(object):
+    def setup_session(self):
+        fp = webdriver.FirefoxProfile()
+        for k, v in self.get_browser_preferences():
+            fp.set_preference(k, v)
+
+        self.browser = webdriver.Firefox(firefox_profile=fp)
+        atexit.register(quit_browser, self.browser)
+
+        super(SeleniumMixin, self).setup_session()
+
+    def wait(self, selector, timeout=10, visible=True, by=By.CSS_SELECTOR):
+        start = datetime.datetime.now()
+
+        while True:
+            seconds_forgone = (datetime.datetime.now() - start).total_seconds()
+
+            try:
+                element = self.browser.find_element(by, selector)
+            except NoSuchElementException:
+                if seconds_forgone > timeout:
+                    raise
+            else:
+                if not visible:
+                    return element
+                elif element.is_displayed():
+                    return element
+                elif seconds_forgone > timeout:
+                    raise NotVisible("Element present, but not visible: {}".format(selector))
+
+            time.sleep(0.5)
+
+    def get_browser_preferences(self):
+        return ()
 
 
 class LoginMixin(object):

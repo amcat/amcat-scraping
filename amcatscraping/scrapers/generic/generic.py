@@ -18,114 +18,102 @@
 ###########################################################################
 import re
 import os
+import http.cookies
 import lxml
+import lxml.html
 import datetime
 import logging
+import locale
 import requests
 import cssselect
 import readability
 import string
+import time
+import iso8601
+import feedparser
+import dateutil
+
+from selenium.common.exceptions import NoSuchElementException
+from selenium.webdriver.common.keys import Keys
 
 from multiprocessing.pool import ThreadPool
 
 from amcat.models import Article
-from amcatscraping.scraper import DeduplicatingUnitScraper
+from amcatscraping.scraper import DeduplicatingUnitScraper, SeleniumMixin, LoginMixin, NotVisible
 from amcatscraping.tools import html2text
 
-from urllib.parse import urljoin
-
+from urllib.parse import urljoin, urlparse
 
 log = logging.getLogger(__name__)
 
-THIS_DIR = os.path.dirname(os.path.abspath(__file__))
-BLOCKLIST = os.path.join(THIS_DIR, "fanboy-annoyance.txt")
-CONTROL_RE = re.compile("[\x00-\x08\x0b\x0e-\x1f\x7f]")
+REMOVE_TAGS = {"img"}
 
+def get_publisher(url):
+    hostname = urlparse(url).hostname
+    publisher = ".".join(hostname.split(".")[-2:])
+    return publisher
 
-# https://github.com/buriy/python-readability/issues/43
-class AdRemover:
-    """
-    This class applies elemhide rules from AdBlock Plus to an lxml
-    document or element object. One or more AdBlock Plus filter
-    subscription files must be provided.
+def dutch_strptime(date, pattern):
+     loc = locale.getlocale()
+     locale.setlocale(locale.LC_ALL, 'nl_NL.UTF-8')
+     try:
+         return datetime.datetime.strptime(date, pattern)
+     finally:
+         locale.setlocale(locale.LC_ALL, loc)
+   
+class GenericScraper(SeleniumMixin, DeduplicatingUnitScraper):
+    index_url = None
+    article_url_re = None
+    article_url_cssselector = "a"
+    cookies = None
 
-    Example usage:
+    # Cookies know to prevent banners
+    default_cookies = {
+        "Cookie_Category_Advertising" : "false",
+        "Cookie_Category_Analytics" : "false",
+        "Cookie_Category_Miscellaneous" : "false",
+        "Cookie_Category_Necessary" : "true",
+        "Cookie_Category_Recommendations": "false",
+        "Cookie_Category_Social": "false",
+        "Cookie_Consent": "false",
+        "nl_cookiewall_version": "1",
+        "cookieconsent": "true",
+        "nmt_closed_cookiebar": "1",
+        "accept_cookies": "1",
+        "cookieconsent_dismissed": "yes"
+    }
 
-    >>> import lxml.html
-    >>> remover = AdRemover('fanboy-annoyance.txt')
-    >>> doc = lxml.html.document_fromstring("<html>...</html>")
-    >>> remover.remove_ads(doc)
-    """
-
-    def __init__(self, *rules_files):
-        if not rules_files:
-            raise ValueError("one or more rules_files required")
-
-        self.rules_files = rules_files
-
-    def get_chunked_rules(self, chunk_size=50):
-        translator = cssselect.HTMLTranslator()
-        rules = set()
-
-        for rules_file in self.rules_files:
-            with open(rules_file, 'r') as f:
-                for line in f:
-                    line = line.strip()
-
-                    # elemhide rules are prefixed by ## in the adblock filter syntax
-                    if line[:2] == '##':
-                        try:
-                            xpath = translator.css_to_xpath(line[2:])
-                            xpath = re.sub(CONTROL_RE, "", xpath)
-                            rules.add(xpath)
-                        except cssselect.SelectorError:
-                            # just skip bad selectors
-                            pass
-
-                    if len(rules) >= chunk_size:
-                        yield "|".join(rules)
-                        rules.clear()
-
-        # create one large query by joining them the xpath | (or) operator
-        #self.xpath_query = '|'.join(rules)
-
-
-    def remove_ads(self, tree):
-        """Remove ads from an lxml document or element object.
-
-        The object passed to this method will be modified in place."""
-        matched = []
-
-        rules = self.get_chunked_rules()
-        with ThreadPool() as pool:
-            for i, elems in enumerate(pool.imap(tree.xpath, rules)):
-                for elem in elems:
-                    matched.append(elem)
-
-        for elem in matched:
-            elem.getparent().remove(elem)
-
-
-class GenericScraper(DeduplicatingUnitScraper):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-        self.adbock_enabled = self.options.get("enable_adblock", "false") in ("true", "1", "yes")
-        self.index_url = self.options["index_url"]
-        self.article_url_re = re.compile(self.options["article_url"])
-        self.adblocker = AdRemover(BLOCKLIST)
-        self.publisher = self.options["publisher"]
+        self.cookies = self.options.get("cookies", self.cookies)
+        self.index_url = self.options.get("index_url", self.index_url)
+        self.article_url_re = re.compile(self.options.get("article_url", self.article_url_re))
+        self.publisher = self.options.get("publisher", get_publisher(self.index_url))
         self.now = datetime.datetime.now()
-        self.remove_elements = self.options.get("remove_elements")
 
-    def get_html(self, url, *args, **kwargs):
-        doc = self.session.get_html(url, *args, **kwargs)
-        if self.remove_elements:
-            for element in doc.cssselect(self.remove_elements):
-                element.getparent().remove(element)
-        if self.adbock_enabled:
-            self.adblocker.remove_ads(doc)
-        return doc
+    def setup_session(self):
+        super().setup_session()
+
+        self.browser.get(self.index_url)
+
+        if self.cookies:
+            for name, morsel in http.cookies.BaseCookie(self.cookies).items():
+                self.browser.add_cookie({'name': name, 'value': morsel.value})
+
+        for name, value in self.default_cookies.items():
+            self.browser.add_cookie({'name': name, 'value': value})
+
+    def get_raw_html(self, url, wait_for="html"):
+        self.browser.get(url)
+        self.wait(wait_for)
+        return self.wait("html").get_attribute("outerHTML")
+
+    def get_date(self, doc):
+        raise NotImplementedError("get_timestamp() not implemented")
+
+    def get_html(self, url, wait_for="html"):
+        return lxml.html.fromstring(self.get_raw_html(url, wait_for=wait_for), base_url=url)
 
     def get_deduplicate_key_from_unit(self, unit) -> str:
         return unit
@@ -136,22 +124,313 @@ class GenericScraper(DeduplicatingUnitScraper):
     def get_deduplicate_units(self):
         index = self.get_html(self.index_url)
 
-        for a in index.cssselect("a"):
+        for a in index.cssselect(self.article_url_cssselector):
             absolute_url = urljoin(self.index_url, a.get("href"))
             if self.article_url_re.search(absolute_url):
                 yield absolute_url
+                break
 
     def scrape_unit(self, url):
-        html = lxml.etree.tostring(self.get_html(url))
-        doc = readability.Document(html)
-        candidates = doc.score_paragraphs()
-        best_candidate = doc.select_best_candidate(candidates)
-        article_doc = doc.get_article(candidates, best_candidate)
-        article_html = lxml.etree.tostring(article_doc, pretty_print=True).decode()
-        text = html2text(article_html)
-        short_title = doc.short_title()
+        reader_url = "about:reader?url={}".format(url)
+        doc = self.get_html(reader_url, wait_for="div.content p")
 
-        article = Article(date=self.now, title=short_title, text=text, url=url)
+        for tag in REMOVE_TAGS:
+            for element in doc.cssselect(tag):
+                element.getparent().remove(element)
+
+        article = doc.cssselect("div.content")[0]
+        article_html = lxml.html.tostring(article).decode()
+
+        title = doc.cssselect("h1.reader-title")[0].text_content().strip()
+        text = html2text(article_html)
+
+        if self.__class__.get_date is not GenericScraper.get_date:
+            # Get contents of un-firefox-read-ed article
+            self.wait(".reader-toolbar .close-button").click()
+            time.sleep(0.3)
+            doc_html = self.wait("html").get_attribute("outerHTML")
+            doc = lxml.html.fromstring(doc_html, base_url=url)
+
+            try:
+                date = self.get_date(doc)
+            except NotImplementedError:
+                date = self.now
+        else:
+            date = self.now
+
+        article = Article(date=self.now, title=title, text=text, url=url)
 
         return article
+
+class GenericRSSScraper(GenericScraper):
+    article_url_re = ".+"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.url_date_cache = {}
+
+    def get_deduplicate_units(self):
+        feed = feedparser.parse(self.index_url)
+
+        for entry in feed['entries']:
+            url = entry["links"][0]["href"]
+            date = dateutil.parser.parse(entry['published'])
+            self.url_date_cache[url] = date
+            yield url
+
+    def get_date(self, doc):
+        return self.url_date_cache[doc.base_url]
+
+
+class GenericLoginMixin(LoginMixin):
+    login_url = None
+    login_username_field = None
+    login_password_field = None
+    login_error_selector = None
+
+    def login(self, username, password):
+        self.browser.get(self.login_url)
+        self.wait(self.login_username_field).send_keys(username)
+        self.wait(self.login_password_field).send_keys(password)
+        self.wait(self.login_password_field).send_keys(Keys.ENTER)
+
+        try:
+            self.wait(self.login_error_selector, timeout=2)
+        except (NoSuchElementException, NotVisible):
+            return True
+        else:
+            return False
+
+
+class Nu(GenericScraper):
+    index_url = "https://www.nu.nl"
+    article_url_re = "/[\w-]+/[0-9]+/.+.html"
+
+    def get_date(self, doc):
+        date = doc.cssselect(".footer .published .small")[0].text_content().strip()
+        date = datetime.datetime.strptime(date, '%d-%m-%y %H:%M')
+        return date
+ 
+class AD(GenericLoginMixin, GenericScraper):
+    login_url = "https://www.ad.nl/inloggen"
+    login_username_field = "#email"
+    login_password_field = "#password"
+    login_error_selector = ".message-block--error"
+
+    index_url = "https://www.ad.nl/"
+    article_url_re = "/[\w-]+/[\w-]+~[a-z0-9]+/"
+
+    def get_date(self, doc):
+        date = doc.cssselect(".article__meta time")[0].text_content().strip()
+        date = datetime.datetime.strptime(date, '%d-%m-%y, %H:%M')
+        return date
+
+class Volkskrant(GenericLoginMixin, GenericScraper):
+    login_url = "https://www.volkskrant.nl/login"
+    login_username_field = "#email"
+    login_password_field = "#password"
+    login_error_selector = ".form__error"
+
+    index_url = "https://www.volkskrant.nl/"
+    article_url_re = "/[\w-]+/[\w-]+~[a-z0-9]+/"
+
+    def get_date(self, doc):
+        date = doc.cssselect("time.artstyle__byline__datetime")[0].get("datetime")
+        return iso8601.iso8601.parse_date(date, default_timezone=None)
+
+    def login(self, username, password):
+        super().login(username, password)
+        self.wait("article")
+        return True
+
+class Trouw(GenericLoginMixin, GenericScraper):
+    login_url = "https://myaccount.trouw.nl/#/login"
+    login_username_field = "#login-input-email"
+    login_password_field = "#login-input-password"
+    login_error_selector = ".login__inline-error"
+
+    index_url = "https://www.trouw.nl/"
+    article_url_re = "/[\w-]+/[\w-]+~[a-z0-9]+/"
+
+    def get_date(self, doc):
+        date = doc.cssselect(".article__datetime")[0].get("datetime")
+        return dutch_strptime(date, "%H:%M, %-d %B %Y")
+
+class FD(GenericLoginMixin, GenericScraper):
+    login_url = "https://fd.nl/login"
+    login_username_field = 'input[name="username"]'
+    login_password_field = 'input[name="password"]'
+    login_error_selector = "form .errors li"
+
+    index_url = "https://fd.nl/"
+    article_url_re = "/[\w-]+/[0-9]+/[\w-]+"
+
+    def get_date(self, doc):
+        date = self.browser.execute_script("return siteData.publicationTime;")
+        return datetime.datetime.strptime(date, "%Y/%m/%d %H:%M:%S")
+
+class NRCBinnenland(GenericLoginMixin, GenericScraper):
+    login_url = "https://nrc.nl/login"
+    login_username_field = 'input[name="username"]'
+    login_password_field = 'input[name="password"]'
+    login_error_selector = ".feedback.fout"
+
+    index_url = "https://www.nrc.nl/sectie/binnenland/"
+    article_url_re = "/nieuws/\d{4}/\d{2}/\d{2}/[\w-]+"
+
+    def get_html(self, *args, **kwargs):
+        doc = super().get_html(*args, **kwargs)
+        for elem in doc.cssselect(".block__sidebar"):
+            elem.getparent().remove(elem)
+        return doc
+
+    def get_date(self, doc):
+        date = doc.cssselect("header .date time")[0].get("datetime")
+        return iso8601.iso8601.parse_date(date, default_timezone=None)
+
+class Telegraaf(GenericLoginMixin, GenericScraper):
+    login_url = "https://accounts.tnet.nl/inloggen/"
+    login_username_field = 'input[name="email"]'
+    login_password_field = 'input[name="password"]'
+    login_error_selector = "form .error"
+
+    index_url = "https://www.telegraaf.nl/"
+    article_url_re = "/nieuws/\d+/"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        section = self.options.get("section")
+        if section:
+            self.index_url += "nieuws/{}/".format(section)
+
+    def login(self, username, password):
+        self.browser.get(self.index_url)
+        self.wait(".CookiesOK").click()
+        return super().login(username, password)
+
+class NOS(GenericScraper):
+    index_url = "https://www.nos.nl/"
+    article_url_re = "/artikel/"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        section = self.options.get("section")
+        if section:
+            self.index_url += "nieuws/{}/".format(section)
+
+    def get_date(self, doc):
+        date = doc.cssselect("article .meta time")[0].get("datetime")
+        return iso8601.iso8601.parse_date(date, default_timezone=None)
+
+class RTLNieuws(GenericScraper):
+    index_url = "https://www.rtlnieuws.nl/"
+    article_url_cssselector = "h1.article__title a"
+    article_url_re = ".+"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        section = self.options.get("section")
+        if section:
+            self.index_url += section
+            self.article_url_re = re.compile("/{}/[\w-]+".format(section))
+
+    def get_date(self, doc):
+        date = doc.cssselect("article .timer")[0].text_content().strip()
+        return dutch_strptime(date, "%d %B %Y %H:%M")
+
+    def setup_session(self):
+        super().setup_session()
+        self.browser.get(self.index_url)
+        self.wait(".accept-button").click()
+
+class EenVandaag(GenericScraper):
+    index_url = "https://eenvandaag.avrotros.nl/"
+    article_url_re = "/item/"
+
+    def get_date(self, doc):
+        date = doc.cssselect('meta[itemProp="datePublished"]')[0].get("content")
+        date = datetime.datetime.strptime(date, '%d-%m-%Y')
+        return date
+
+class SocialeVraagstukken(GenericScraper):
+    index_url = "https://www.socialevraagstukken.nl/"
+    article_url_cssselector = "article h2 a"
+    article_url_re = ".+"
+
+    def get_date(self, doc):
+        date = doc.cssselect("time.published")[0].get("datetime")
+        return iso8601.iso8601.parse_date(date, default_timezone=None)
+
+class Zembla(GenericScraper):
+    index_url = "https://zembla.bnnvara.nl/nieuws"
+    article_url_re = "/nieuws/[\w-]+"
+
+    def get_date(self, doc):
+        date = doc.cssselect("time.date")[0].get("datetime")
+        return iso8601.iso8601.parse_date(date, default_timezone=None)
+
+class DeMonitor(GenericScraper):
+    index_url = "https://demonitor.kro-ncrv.nl"
+    article_url_re = "/artikelen/[\w-]+"
+
+    def get_date(self, doc):
+        date = doc.cssselect(".dm-article-show-header-content div > span")[0].text_content().strip()
+        return dutch_strptime(date, "%A %d %B %Y")
+
+class Kassa(GenericScraper):
+    index_url = "https://kassa.bnnvara.nl/nieuws"
+    article_url_re = "/nieuws/[\w-]+"
+
+    def get_date(self, doc):
+        date = doc.cssselect("article .meta time")[0].text_content().strip()
+        return dutch_strptime(date, "%A %d %B %Y")
+
+class PW(GenericScraper):
+    index_url = "https://www.pw.nl/nieuws/alle-nieuws"
+    article_url_re = "/nieuws/\d{4}/[\w-]+"
+
+    def get_date(self, doc):
+        date = doc.cssselect(".documentModified")[0].text_content().strip()
+        date = datetime.datetime.strptime(date, '%d-%m-%Y')
+        return date
+
+class Radar(GenericScraper):
+    index_url = "https://radar.avrotros.nl/nieuws/"
+    article_url_re = "/nieuws/detail/[\w-]+"
+
+    def get_date(self, doc):
+        date = doc.cssselect("article time")[0].get("datetime")
+        return iso8601.iso8601.parse_date(date, default_timezone=None)
+
+class BinnenlandsBestuur(GenericRSSScraper):
+    index_url = "https://www.binnenlandsbestuur.nl/rss/default.lynkx?category=147960"
+
+class AMWeb(GenericRSSScraper):
+    index_url = "http://www.amweb.nl/rss_feeds/all.rss"
+
+class Skipr(GenericRSSScraper):
+    index_url = "https://www.skipr.nl/actueel/rss.xml"
+
+class ZorgwelzijnNonPremium(GenericScraper):
+    index_url = "https://www.zorgwelzijn.nl/nieuws-zorg-welzijn/"
+    article_url_cssselector = ".td_module_106:not(.premium-content-slogan) .entry-title a"
+    article_url_re = ".+"
+
+    def get_date(self, doc):
+        date = doc.cssselect('meta[property="article:published_time"]')[0].get("content")
+        return dateutil.parser.parse(date)
+
+class ZorgvisieNonPremium(ZorgwelzijnNonPremium):
+    index_url = "https://www.zorgvisie.nl/nieuws/"
+
+class MedischContact(GenericScraper):
+    index_url = "https://www.medischcontact.nl/nieuws/laatste-nieuws.htm"
+    article_url_re = "/nieuws/laatste-nieuws/artikel/[\w-]+"
+
+    def get_date(self, doc):
+        date = doc.cssselect('meta[name="pubdate"]')[0].get("content")
+        return dateutil.parser.parse(date)
 
