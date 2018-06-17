@@ -149,7 +149,7 @@ class GenericScraper(SeleniumMixin, DeduplicatingUnitScraper):
         else:
             date = self.now
 
-        article = Article(date=self.now, title=title, text=text, url=url)
+        article = Article(date=date, title=title, text=text, url=url)
 
         return article
 
