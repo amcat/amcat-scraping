@@ -34,6 +34,7 @@ from typing import Iterable, List, Optional, Any, Union, Tuple, Set
 
 from selenium import webdriver
 from selenium.common.exceptions import NoSuchElementException
+from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.by import By
 
 from amcat.models import PropertyMappingJSONEncoder
@@ -584,6 +585,7 @@ class SeleniumMixin(object):
         return ()
 
 
+
 class LoginMixin(object):
     """Logs in to the resource before scraping"""
     def __init__(self, username, password, **kwargs):
@@ -599,4 +601,24 @@ class LoginMixin(object):
         
     def login(self, username, password):
         raise NotImplementedError("login() not implemented.")
+
+
+class SeleniumLoginMixin(LoginMixin):
+    login_url = None
+    login_username_field = None
+    login_password_field = None
+    login_error_selector = None
+
+    def login(self, username, password):
+        self.browser.get(self.login_url)
+        self.wait(self.login_username_field).send_keys(username)
+        self.wait(self.login_password_field).send_keys(password)
+        self.wait(self.login_password_field).send_keys(Keys.ENTER)
+
+        try:
+            self.wait(self.login_error_selector, timeout=2)
+        except (NoSuchElementException, NotVisible):
+            return True
+        else:
+            return False
 

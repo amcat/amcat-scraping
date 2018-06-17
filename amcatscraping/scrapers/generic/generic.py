@@ -16,33 +16,24 @@
 # You should have received a copy of the GNU Lesser General Public        #
 # License along with AmCAT.  If not, see <http://www.gnu.org/licenses/>.  #
 ###########################################################################
-import re
-import os
-import http.cookies
-import lxml
-import lxml.html
 import datetime
-import logging
+import http.cookies
 import locale
-import requests
-import cssselect
-import readability
-import string
+import logging
+import re
 import time
-import iso8601
-import feedparser
-import dateutil
-
-from selenium.common.exceptions import NoSuchElementException
-from selenium.webdriver.common.keys import Keys
-
-from multiprocessing.pool import ThreadPool
-
-from amcat.models import Article
-from amcatscraping.scraper import DeduplicatingUnitScraper, SeleniumMixin, LoginMixin, NotVisible
-from amcatscraping.tools import html2text
 
 from urllib.parse import urljoin, urlparse
+
+import dateutil
+import feedparser
+import iso8601
+import lxml
+import lxml.html
+
+from amcat.models import Article
+from amcatscraping.scraper import DeduplicatingUnitScraper, SeleniumMixin, SeleniumLoginMixin
+from amcatscraping.tools import html2text
 
 log = logging.getLogger(__name__)
 
@@ -182,25 +173,6 @@ class GenericRSSScraper(GenericScraper):
         return self.url_date_cache[doc.base_url]
 
 
-class GenericLoginMixin(LoginMixin):
-    login_url = None
-    login_username_field = None
-    login_password_field = None
-    login_error_selector = None
-
-    def login(self, username, password):
-        self.browser.get(self.login_url)
-        self.wait(self.login_username_field).send_keys(username)
-        self.wait(self.login_password_field).send_keys(password)
-        self.wait(self.login_password_field).send_keys(Keys.ENTER)
-
-        try:
-            self.wait(self.login_error_selector, timeout=2)
-        except (NoSuchElementException, NotVisible):
-            return True
-        else:
-            return False
-
 
 class Nu(GenericScraper):
     index_url = "https://www.nu.nl"
@@ -211,7 +183,7 @@ class Nu(GenericScraper):
         date = datetime.datetime.strptime(date, '%d-%m-%y %H:%M')
         return date
  
-class AD(GenericLoginMixin, GenericScraper):
+class AD(SeleniumLoginMixin, GenericScraper):
     login_url = "https://www.ad.nl/inloggen"
     login_username_field = "#email"
     login_password_field = "#password"
@@ -225,7 +197,7 @@ class AD(GenericLoginMixin, GenericScraper):
         date = datetime.datetime.strptime(date, '%d-%m-%y, %H:%M')
         return date
 
-class Volkskrant(GenericLoginMixin, GenericScraper):
+class Volkskrant(SeleniumLoginMixin, GenericScraper):
     login_url = "https://www.volkskrant.nl/login"
     login_username_field = "#email"
     login_password_field = "#password"
@@ -243,7 +215,7 @@ class Volkskrant(GenericLoginMixin, GenericScraper):
         self.wait("article")
         return True
 
-class Trouw(GenericLoginMixin, GenericScraper):
+class Trouw(SeleniumLoginMixin, GenericScraper):
     login_url = "https://myaccount.trouw.nl/#/login"
     login_username_field = "#login-input-email"
     login_password_field = "#login-input-password"
@@ -256,7 +228,7 @@ class Trouw(GenericLoginMixin, GenericScraper):
         date = doc.cssselect(".article__datetime")[0].get("datetime")
         return dutch_strptime(date, "%H:%M, %-d %B %Y")
 
-class FD(GenericLoginMixin, GenericScraper):
+class FD(SeleniumLoginMixin, GenericScraper):
     login_url = "https://fd.nl/login"
     login_username_field = 'input[name="username"]'
     login_password_field = 'input[name="password"]'
@@ -269,7 +241,7 @@ class FD(GenericLoginMixin, GenericScraper):
         date = self.browser.execute_script("return siteData.publicationTime;")
         return datetime.datetime.strptime(date, "%Y/%m/%d %H:%M:%S")
 
-class NRCBinnenland(GenericLoginMixin, GenericScraper):
+class NRCBinnenland(SeleniumLoginMixin, GenericScraper):
     login_url = "https://nrc.nl/login"
     login_username_field = 'input[name="username"]'
     login_password_field = 'input[name="password"]'
@@ -288,7 +260,7 @@ class NRCBinnenland(GenericLoginMixin, GenericScraper):
         date = doc.cssselect("header .date time")[0].get("datetime")
         return iso8601.iso8601.parse_date(date, default_timezone=None)
 
-class Telegraaf(GenericLoginMixin, GenericScraper):
+class Telegraaf(SeleniumLoginMixin, GenericScraper):
     login_url = "https://accounts.tnet.nl/inloggen/"
     login_username_field = 'input[name="email"]'
     login_password_field = 'input[name="password"]'
