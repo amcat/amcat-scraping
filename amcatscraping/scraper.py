@@ -298,7 +298,7 @@ class DeduplicatingUnitScraper(UnitScraper):
     def _get_deduplicate_key_from_unit(self, unit: any) -> bytes:
         return self._hash_key(self.get_deduplicate_key_from_unit(unit))
 
-    def _get_deduplicate_key_from_article(self, article: Article) -> str:
+    def _get_deduplicate_key_from_article(self, article: Article) -> bytes:
         return self._hash_key(self.get_deduplicate_key_from_article(article))
 
     def get_deduplicate_key_from_unit(self, unit: Any) -> str:
@@ -567,7 +567,8 @@ class SeleniumMixin(object):
             seconds_forgone = (datetime.datetime.now() - start).total_seconds()
 
             try:
-                element = self.browser.find_element(by, selector)
+                element = on.find_element(by, selector)
+                elements = on.find_elements(by, selector)
             except NoSuchElementException:
                 if seconds_forgone > timeout:
                     raise
@@ -576,6 +577,10 @@ class SeleniumMixin(object):
                     return element
                 elif element.is_displayed():
                     return element
+                elif elements:
+                    for e in elements:
+                        if e.is_displayed():
+                            return e
                 elif seconds_forgone > timeout:
                     raise NotVisible("Element present, but not visible: {}".format(selector))
 
