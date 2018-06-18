@@ -560,8 +560,9 @@ class SeleniumMixin(object):
 
         super(SeleniumMixin, self).setup_session()
 
-    def wait(self, selector, timeout=10, visible=True, by=By.CSS_SELECTOR):
+    def wait(self, selector, timeout=10, visible=True, by=By.CSS_SELECTOR, on=None):
         start = datetime.datetime.now()
+        on = on or self.browser
 
         while True:
             seconds_forgone = (datetime.datetime.now() - start).total_seconds()
