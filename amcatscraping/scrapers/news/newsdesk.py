@@ -57,10 +57,13 @@ def dutch_strptime(date, pattern):
 
 
 def get_data_urls(article_element):
+    seen = set()
     for a in article_element.find_elements_by_css_selector("a"):
         href = a.get_attribute("href")
         if href and href.startswith(DATA_URL):
-            yield href
+            if href not in seen:
+                yield href
+                seen.add(href)
 
 
 class NewsdeskScraper(SeleniumLoginMixin, SeleniumMixin, DeduplicatingUnitScraper):
@@ -129,16 +132,21 @@ class NewsdeskScraper(SeleniumLoginMixin, SeleniumMixin, DeduplicatingUnitScrape
             while datetime.datetime.now() - start < datetime.timedelta(seconds=30):
                 ajax_mask = self.wait("#article_ajax_mask", visible=False)
                 if not ajax_mask.is_displayed():
+                    time.sleep(1)
                     break
+
+            time.sleep(5)
 
             # Yield articles
             articles = self.browser.find_elements_by_css_selector("#article-results-list > div")
             article_units = list(map(self.scrape_unit_meta, articles))
-            yield from article_units
 
             # If first and last article were already in db, we're done
             first_article_cached = self.is_cached(article_units[0])
             last_article_cached = self.is_cached(article_units[-1])
+
+            yield from article_units
+
             if first_article_cached and last_article_cached:
                 break
             else:
@@ -175,7 +183,9 @@ class NewsdeskScraper(SeleniumLoginMixin, SeleniumMixin, DeduplicatingUnitScrape
         article = Article(url=url, title=title, date=date)
         article.set_property("publisher", publisher)
         article.set_property("text_url", text_url)
-        article.set_property("pubdate_date", pub_date)
+
+        # Crashes AmCAT API:
+        #article.set_property("pubdate_date", pub_date)
 
         try:
             article.set_property("author", get_byline_prop("author"))
@@ -208,10 +218,13 @@ class NewsdeskScraper(SeleniumLoginMixin, SeleniumMixin, DeduplicatingUnitScrape
         article_html = inner.get_attribute("innerHTML")
         article.text = html2text(article_html)
 
-        for i, data_url in enumerate(get_data_urls(inner)):
+        # Cut off data urls at #3; no article actually has that many. All instances so far led to the same data (even
+        # though the url differed).
+        data_urls = list(get_data_urls(inner))[:3]
+        for i, data_url in enumerate(data_urls):
             article.set_property("data{}_url".format(i), data_url)
 
         # Be gentle with servers
-        time.sleep(random.uniform(0.5, 5.0))
+        time.sleep(random.uniform(0.5, 1.5))
 
         return article
