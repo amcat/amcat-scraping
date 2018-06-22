@@ -16,20 +16,149 @@
 # You should have received a copy of the GNU Lesser General Public        #
 # License along with AmCAT.  If not, see <http://www.gnu.org/licenses/>.  #
 ###########################################################################
-from amcatscraping.scrapers.newspapers import pcm
+import datetime
+import locale
+import time
+
+from html2text import html2text
+from urllib.parse import urljoin
+
+from collections import namedtuple
+from typing import Tuple
+
+from selenium.common.exceptions import ElementClickInterceptedException, NoSuchElementException
+from selenium.webdriver.common.by import By
+
+from amcat.models import Article
+from amcatscraping.scraper import SeleniumLoginMixin, SeleniumMixin, DeduplicatingUnitScraper, DateRangeScraper
+
+EDITIONS = ["Algemeen Dagblad"]
+
+ADUnit = namedtuple("ADUnit", ["url", "date", "title", "page", "screenshot", "text"])
 
 
-class AlgemeenDagbladScraper(pcm.PCMScraper):
-    domain = "ad.nl"
-    paper_id = 8001
-    context_id = "AD"
-    caps_code = "ad-441"
-    login_redirect = "http%3A%2F%2Fkrant.ad.nl%2F"
-    publisher = "Algemeen Dagblad"
-    
+def dutch_strptime(date, pattern):
+    loc = locale.getlocale()
+    locale.setlocale(locale.LC_ALL, 'nl_NL.UTF-8')
+    try:
+        return datetime.datetime.strptime(date, pattern)
+    finally:
+        locale.setlocale(locale.LC_ALL, loc)
 
 
-if __name__ == '__main__':
-    from amcatscraping.tools import setup_logging
-    setup_logging()
-    AlgemeenDagbladScraper().run()
+class AlgemeenDagbladScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, DeduplicatingUnitScraper):
+    login_url = "http://krant.ad.nl/"
+    login_username_field = "#username"
+    login_password_field = "#password"
+    login_error_selector = ".message.message--error"
+
+    def click(self, element):
+        try:
+            element.click()
+        except ElementClickInterceptedException:
+            self.click(element.find_element_by_xpath(".."))
+
+    def login(self, username, password):
+        self.browser.get(self.login_url)
+        self.wait("a.fjs-accept").click()
+        return super(AlgemeenDagbladScraper, self).login(username, password)
+
+    def get_url_and_date_from_unit(self, unit: ADUnit) -> Tuple[str, datetime.date]:
+        return unit.url, unit.date
+
+    def get_deduplicate_key_from_article(self, article: Article) -> str:
+        return article.url
+
+    def get_deduplicate_key_from_unit(self, unit: ADUnit) -> str:
+        return unit.url
+
+    def _get_deduplicate_units(self, date, edition):
+        # Select edition
+        self.browser.get(self.login_url)
+        self.click(self.wait('//div[text() = "{}"]'.format(edition), by=By.XPATH))
+
+        # Go to archive and select paper of this date
+        self.wait("#goToArchive").click()
+
+        for archive_issue in self.browser.find_elements_by_css_selector("archive-issue"):
+            try:
+                archive_date = archive_issue.find_element_by_css_selector(".issueDate").text.strip()
+            except NoSuchElementException:
+                continue
+            if not archive_date:
+                continue
+            if dutch_strptime(archive_date, "%d %B %Y").date() == date:
+                archive_issue.click()
+                break
+        else:
+            return
+
+        # Scrape unit
+        self.browser.switch_to_frame(self.wait("#issue"))
+
+        seconds_forgone = 0
+        start = datetime.datetime.now()
+        while seconds_forgone < 30:
+            seconds_forgone = (datetime.datetime.now() - start).total_seconds()
+
+            try:
+                self.wait("#articleMenuItem").click()
+            except ElementClickInterceptedException:
+                pass
+            else:
+                break
+
+        self.wait(".articleListItem")
+        articles = list(self.browser.find_elements_by_css_selector(".articleListItem"))
+        for article in articles:
+            page = int(article.get_attribute("data-page"))
+            refid = article.get_attribute("data-refid")
+            url = urljoin(self.browser.current_url + "/", refid)
+
+            h1s = list(article.find_elements_by_css_selector(".articleListItem > h1"))
+            h2s = list(article.find_elements_by_css_selector(".articleListItem > h2"))
+            h3s = list(article.find_elements_by_css_selector(".articleListItem > h3"))
+
+            if h1s:
+                title = h1s.pop(0).text
+            elif h2s:
+                title = h2s.pop(0).text
+            else:
+                title = h3s.pop(0).text
+
+            subtitles = [h.get_property("outerHTML") for h in h1s + h2s + h3s]
+            try:
+                content = article.find_element_by_css_selector("div.content").get_property("outerHTML")
+            except NoSuchElementException:
+                continue
+
+            article_html = "\n".join(subtitles + [content])
+            text = html2text(article_html)
+
+            # Screenshot code:
+            # article.click()
+            # self.browser.switch_to_frame(self.wait("#articleViewContent > iframe"))
+            # screenshot = self.wait("#page article").screenshot_as_base64
+            # self.browser.switch_to_default_content()
+            # self.browser.switch_to_frame(self.wait("#issue"))
+            screenshot = None
+
+            yield ADUnit(url, date, title, page, screenshot, text)
+
+            self.wait("#articleNavigationBack").click()
+
+            time.sleep(0.5)
+
+    def get_deduplicate_units(self):
+        for edition in EDITIONS:
+            for date in self.dates:
+                yield from self._get_deduplicate_units(date, edition)
+
+    def scrape_unit(self, unit: ADUnit):
+        return Article(
+            title=unit.title,
+            url=unit.url,
+            text=unit.text,
+            page_int=unit.page,
+            date=unit.date
+        )
