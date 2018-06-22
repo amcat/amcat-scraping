@@ -115,11 +115,14 @@ class GenericScraper(SeleniumMixin, DeduplicatingUnitScraper):
     def get_deduplicate_units(self):
         index = self.get_html(self.index_url)
 
-        for a in index.cssselect(self.article_url_cssselector):
+        units = index.cssselect(self.article_url_cssselector)
+        n_units = len(units)
+
+        for i, a in enumerate(units):
             absolute_url = urljoin(self.index_url, a.get("href"))
             if self.article_url_re.search(absolute_url):
+                print("{}/{}: {}".format(i, n_units, absolute_url))
                 yield absolute_url
-                break
 
     def scrape_unit(self, url):
         reader_url = "about:reader?url={}".format(url)
@@ -146,6 +149,8 @@ class GenericScraper(SeleniumMixin, DeduplicatingUnitScraper):
                 date = self.get_date(doc)
             except NotImplementedError:
                 date = self.now
+            except Exception as e:
+                log.warning("get_date() failed for {} with: {}".format(url, e))
         else:
             date = self.now
 
@@ -191,6 +196,7 @@ class AD(SeleniumLoginMixin, GenericScraper):
 
     index_url = "https://www.ad.nl/"
     article_url_re = "/[\w-]+/[\w-]+~[a-z0-9]+/"
+    article_url_cssselector = ".articles-list.fjs-articles-list a"
 
     def get_date(self, doc):
         date = doc.cssselect(".article__meta time")[0].text_content().strip()
@@ -216,16 +222,16 @@ class Volkskrant(SeleniumLoginMixin, GenericScraper):
         return True
 
 class Trouw(SeleniumLoginMixin, GenericScraper):
-    login_url = "https://myaccount.trouw.nl/#/login"
-    login_username_field = "#login-input-email"
-    login_password_field = "#login-input-password"
-    login_error_selector = ".login__inline-error"
+    login_url = "https://www.trouw.nl/account/login?url=/"
+    login_username_field = "#loginform_loginId"
+    login_password_field = "#loginform_password"
+    login_error_selector = ".form__error-description.fjs-login-error"
 
     index_url = "https://www.trouw.nl/"
     article_url_re = "/[\w-]+/[\w-]+~[a-z0-9]+/"
 
     def get_date(self, doc):
-        date = doc.cssselect(".article__datetime")[0].get("datetime")
+        date = self.browser.execute_script('return window.APP.article["publicationDateAndTime"]')
         return dutch_strptime(date, "%H:%M, %-d %B %Y")
 
 class FD(SeleniumLoginMixin, GenericScraper):
@@ -235,7 +241,7 @@ class FD(SeleniumLoginMixin, GenericScraper):
     login_error_selector = "form .errors li"
 
     index_url = "https://fd.nl/"
-    article_url_re = "/[\w-]+/[0-9]+/[\w-]+"
+    article_url_re = "/[\w-]+/[0-9]+/[\w-]+[^#]*$"
 
     def get_date(self, doc):
         date = self.browser.execute_script("return siteData.publicationTime;")
