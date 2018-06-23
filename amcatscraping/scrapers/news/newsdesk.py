@@ -26,12 +26,12 @@ import lxml.html
 from collections import namedtuple
 from typing import Tuple, Iterable
 
-from html2text import html2text
 from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.common.by import By
 
 from amcat.models import Article
 from amcatscraping.scraper import SeleniumLoginMixin, SeleniumMixin, DeduplicatingUnitScraper
+from amcatscraping.tools import html2text
 
 NewsdeskUnit = namedtuple("NewsdeskUnit", ["article_element", "article"])
 

@@ -21,14 +21,13 @@ from __future__ import print_function, unicode_literals
 import datetime
 import logging
 import requests
+
 from iso8601 import parse_date
-
-from amcat.models import Article
-from amcatscraping.scraper import UnitScraper, DateRangeScraper, ArticleTree, \
-    DeduplicatingUnitScraper
-from amcatscraping.tools import html2text
 from collections import defaultdict
+from amcat.models import Article
 
+from amcatscraping.scraper import DateRangeScraper, ArticleTree, DeduplicatingUnitScraper
+from amcatscraping.tools import html2text
 
 ARCHIEF_URL = "http://www.geenstijl.nl/mt/archieven/maandelijks/%Y/%m/"
 
