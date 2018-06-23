@@ -18,9 +18,7 @@
 ###########################################################################
 import datetime
 import locale
-import time
 
-from html2text import html2text
 from urllib.parse import urljoin
 
 from collections import namedtuple
@@ -31,6 +29,7 @@ from selenium.webdriver.common.by import By
 
 from amcat.models import Article
 from amcatscraping.scraper import SeleniumLoginMixin, SeleniumMixin, DeduplicatingUnitScraper, DateRangeScraper
+from amcatscraping.tools import html2text
 
 EDITIONS = ["Algemeen Dagblad"]
 
@@ -108,31 +107,36 @@ class AlgemeenDagbladScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper
             else:
                 break
 
-        self.wait(".articleListItem")
         articles = list(self.browser.find_elements_by_css_selector(".articleListItem"))
         for article in articles:
             page = int(article.get_attribute("data-page"))
             refid = article.get_attribute("data-refid")
             url = urljoin(self.browser.current_url + "/", refid)
 
-            h1s = list(article.find_elements_by_css_selector(".articleListItem > h1"))
-            h2s = list(article.find_elements_by_css_selector(".articleListItem > h2"))
-            h3s = list(article.find_elements_by_css_selector(".articleListItem > h3"))
+            def collect_headers(els):
+                for el in els:
+                    el_text = el.get_property("textContent").strip()
+                    if el_text:
+                        yield (el, el_text)
+
+            h1s = list(collect_headers(article.find_elements_by_css_selector(".articleListItem > h1")))
+            h2s = list(collect_headers(article.find_elements_by_css_selector(".articleListItem > h2")))
+            h3s = list(collect_headers(article.find_elements_by_css_selector(".articleListItem > h3")))
 
             if h1s:
-                title = h1s.pop(0).text
+                _, title = h1s.pop(0)
             elif h2s:
-                title = h2s.pop(0).text
+                _, title = h2s.pop(0)
             else:
-                title = h3s.pop(0).text
+                _, title = h3s.pop(0)
 
-            subtitles = [h.get_property("outerHTML") for h in h1s + h2s + h3s]
             try:
                 content = article.find_element_by_css_selector("div.content").get_property("outerHTML")
             except NoSuchElementException:
                 continue
 
-            article_html = "\n".join(subtitles + [content])
+            subtitles = [element.get_property("outerHTML") for element, _ in h1s + h2s + h3s]
+            article_html = "".join(subtitles) + content
             text = html2text(article_html)
 
             # Screenshot code:
@@ -141,13 +145,11 @@ class AlgemeenDagbladScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper
             # screenshot = self.wait("#page article").screenshot_as_base64
             # self.browser.switch_to_default_content()
             # self.browser.switch_to_frame(self.wait("#issue"))
+            # self.wait("#articleNavigationBack").click()
+            # time.sleep(0.5)
             screenshot = None
 
             yield ADUnit(url, date, title, page, screenshot, text)
-
-            self.wait("#articleNavigationBack").click()
-
-            time.sleep(0.5)
 
     def get_deduplicate_units(self):
         for edition in EDITIONS:
