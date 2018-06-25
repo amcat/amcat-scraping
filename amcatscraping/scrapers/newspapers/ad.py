@@ -46,6 +46,8 @@ def dutch_strptime(date, pattern):
 
 
 class AlgemeenDagbladScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, DeduplicatingUnitScraper):
+    publisher = "Algemeen Dagblad"
+
     login_url = "http://krant.ad.nl/"
     login_username_field = "#username"
     login_password_field = "#password"
