@@ -141,6 +141,13 @@ class AlgemeenDagbladScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper
             article_html = "".join(subtitles) + content
             text = html2text(article_html)
 
+            #try:
+            #    author = article.find_element_by_css_selector(".byline").get_property("textContent").strip()
+            #except NoSuchElementException:
+            #    pass
+            #else:
+            #    print(author)
+
             # Screenshot code:
             # article.click()
             # self.browser.switch_to_frame(self.wait("#articleViewContent > iframe"))
@@ -163,6 +170,6 @@ class AlgemeenDagbladScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper
             title=unit.title,
             url=unit.url,
             text=unit.text,
-            page_int=unit.page,
+            pagenr_int=unit.page,
             date=unit.date
         )
