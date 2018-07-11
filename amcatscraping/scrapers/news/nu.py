@@ -59,9 +59,11 @@ class NuScraper(DeduplicatingUnitScraper):
 
     def parse_date(self, date: str):
         # Date example: Sun, 11 Dec 2016 23:03:56 +0100
+        date = date.replace("+02:00+0200", "+0200")
         timezone = date.split(" ")[-1]
         date = dateparser.parse(date)
-        date = date.isoformat() + timezone
+        date = date.isoformat().split("+")[0]
+        date = date + timezone
         return iso8601.iso8601.parse_date(date)
 
     def scrape_unit(self, entry):
