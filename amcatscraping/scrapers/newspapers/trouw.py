@@ -19,18 +19,10 @@ from __future__ import unicode_literals, print_function
 # License along with AmCAT.  If not, see <http://www.gnu.org/licenses/>.  #
 ###########################################################################
 
-from amcatscraping.scrapers.newspapers import pcm
+from amcatscraping.scrapers.newspapers import ad
 
 
-class TrouwScraper(pcm.PCMScraper):
-    domain = "trouw.nl"
-    paper_id = 8004
-    context_id = "NL"
-    caps_code = "tr-423"
-    login_redirect = "http%3A%2F%2Fwww.trouw.nl%2Ftr%2Fsecured%2Fcheck.do"
+class TrouwScraper(ad.EPagesScraper):
+    cookies_ok_button = ".btn.btn--accept"
+    login_url = "http://krant.trouw.nl/"
     publisher = "Trouw"
-    
-if __name__ == '__main__':
-    from amcatscraping.tools import setup_logging
-    setup_logging()
-    TrouwScraper().run()

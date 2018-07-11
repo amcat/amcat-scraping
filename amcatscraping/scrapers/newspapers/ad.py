@@ -31,9 +31,7 @@ from amcat.models import Article
 from amcatscraping.scraper import SeleniumLoginMixin, SeleniumMixin, DeduplicatingUnitScraper, DateRangeScraper
 from amcatscraping.tools import html2text
 
-EDITIONS = ["Algemeen Dagblad"]
-
-ADUnit = namedtuple("ADUnit", ["url", "date", "title", "page", "screenshot", "text"])
+EPagesUnit = namedtuple("EPagesUnit", ["url", "date", "title", "page", "screenshot", "text"])
 
 
 def dutch_strptime(date, pattern):
@@ -44,11 +42,10 @@ def dutch_strptime(date, pattern):
     finally:
         locale.setlocale(locale.LC_ALL, loc)
 
-
-class AlgemeenDagbladScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, DeduplicatingUnitScraper):
-    publisher = "Algemeen Dagblad"
-
-    login_url = "http://krant.ad.nl/"
+class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, DeduplicatingUnitScraper):
+    cookies_ok_button = None
+    editions = None
+    login_url = None
     login_username_field = "#username"
     login_password_field = "#password"
     login_error_selector = ".message.message--error"
@@ -61,22 +58,24 @@ class AlgemeenDagbladScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper
 
     def login(self, username, password):
         self.browser.get(self.login_url)
-        self.wait("a.fjs-accept").click()
-        return super(AlgemeenDagbladScraper, self).login(username, password)
+        self.wait(self.cookies_ok_button).click()
+        return super(EPagesScraper, self).login(username, password)
 
-    def get_url_and_date_from_unit(self, unit: ADUnit) -> Tuple[str, datetime.date]:
+    def get_url_and_date_from_unit(self, unit: EPagesUnit) -> Tuple[str, datetime.date]:
         return unit.url, unit.date
 
     def get_deduplicate_key_from_article(self, article: Article) -> str:
         return article.url
 
-    def get_deduplicate_key_from_unit(self, unit: ADUnit) -> str:
+    def get_deduplicate_key_from_unit(self, unit: EPagesUnit) -> str:
         return unit.url
 
-    def _get_deduplicate_units(self, date, edition):
+    def _get_deduplicate_units(self, date, edition=None):
         # Select edition
         self.browser.get(self.login_url)
-        self.click(self.wait('//div[text() = "{}"]'.format(edition), by=By.XPATH))
+
+        if edition is not None:
+            self.click(self.wait('//div[text() = "{}"]'.format(edition), by=By.XPATH))
 
         # Go to archive and select paper of this date
         self.wait("#goToArchive").click()
@@ -158,14 +157,17 @@ class AlgemeenDagbladScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper
             # time.sleep(0.5)
             screenshot = None
 
-            yield ADUnit(url, date, title, page, screenshot, text)
+            yield EPagesUnit(url, date, title, page, screenshot, text)
 
     def get_deduplicate_units(self):
-        for edition in EDITIONS:
-            for date in self.dates:
-                yield from self._get_deduplicate_units(date, edition)
+        for date in self.dates:
+            if self.editions is not None:
+                for edition in self.editions:
+                    yield from self._get_deduplicate_units(date, edition)
+            else:
+                yield from self._get_deduplicate_units(date)
 
-    def scrape_unit(self, unit: ADUnit):
+    def scrape_unit(self, unit: EPagesUnit):
         return Article(
             title=unit.title,
             url=unit.url,
@@ -173,3 +175,10 @@ class AlgemeenDagbladScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper
             pagenr_int=unit.page,
             date=unit.date
         )
+
+class AlgemeenDagbladScraper(EPagesScraper):
+    cookies_ok_button = "a.fjs-accept"
+    publisher = "Algemeen Dagblad"
+    login_url = "http://krant.ad.nl/"
+    editions = ["Algemeen Dagblad"]
+
