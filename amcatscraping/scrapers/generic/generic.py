@@ -151,6 +151,7 @@ class GenericScraper(SeleniumMixin, DeduplicatingUnitScraper):
                 date = self.now
             except Exception as e:
                 log.warning("get_date() failed for {} with: {}".format(url, e))
+                date = self.now
         else:
             date = self.now
 
@@ -240,8 +241,9 @@ class FD(SeleniumLoginMixin, GenericScraper):
     login_password_field = 'input[name="password"]'
     login_error_selector = "form .errors li"
 
-    index_url = "https://fd.nl/"
-    article_url_re = "/[\w-]+/[0-9]+/[\w-]+[^#]*$"
+    index_url = "https://fd.nl/laatste-nieuws"
+    article_url_cssselector = "article > a"
+    article_url_re = ".+"
 
     def get_date(self, doc):
         date = self.browser.execute_script("return siteData.publicationTime;")
