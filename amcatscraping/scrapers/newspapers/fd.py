@@ -137,6 +137,8 @@ class FinancieelDagbladScraper(LoginMixin, UnitScraper, DateRangeScraper):
             return None
 
         text = html2text(text_doc.cssselect("main > article > .body"))
+        if not text.strip():
+            return None
 
         article = Article(title=title, date=date, text=text, url=url)
 
