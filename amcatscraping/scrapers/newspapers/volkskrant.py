@@ -19,21 +19,10 @@ from __future__ import unicode_literals, print_function
 # License along with AmCAT.  If not, see <http://www.gnu.org/licenses/>.  #
 ###########################################################################
 
-from amcatscraping.scrapers.newspapers import pcm
+from amcatscraping.scrapers.newspapers import ad
 
 
-class VolkskrantScraper(pcm.PCMScraper):
-    def __init__(self, *args, **kwargs):
-        super(VolkskrantScraper, self).__init__(*args, **kwargs)
-
-    domain = "volkskrant.nl"
-    paper_id = 8002
-    context_id = "NL"
-    caps_code = "vk-1201"
-    login_redirect = "http%3A%2F%2Fwww.volkskrant.nl%2Fsso%2Flogin-redirect"
-    publisher = "De Volkskrant"
-
-if __name__ == '__main__':
-    from amcatscraping.tools import setup_logging
-    setup_logging()
-    VolkskrantScraper().run()
+class VolkskrantScraper(ad.EPagesScraper):
+    cookies_ok_button = ".button--accept"
+    login_url = "http://krant.volkskrant.nl/"
+    publisher = "Volkskrant"
