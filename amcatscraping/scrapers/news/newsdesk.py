@@ -151,10 +151,10 @@ class NewsdeskScraper(SeleniumLoginMixin, SeleniumMixin, DeduplicatingUnitScrape
                 break
             else:
                 next_page_button = self.browser.find_elements_by_css_selector(".paginator .paginator__button")[-1]
-                if next_page_button.is_enabled():
-                    next_page_button.click()
-                else:
+                if "disable" in next_page_button.get_attribute("class").split():
                     break
+                else:
+                    next_page_button.click()
 
     def get_url_and_date_from_unit(self, unit: NewsdeskUnit) -> Tuple[str, datetime.date]:
         return unit.article.url, unit.article.date
