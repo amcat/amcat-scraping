@@ -100,6 +100,10 @@ class NewsdeskScraper(SeleniumLoginMixin, SeleniumMixin, DeduplicatingUnitScrape
         return article.url
 
     def get_deduplicate_units(self) -> Iterable[NewsdeskUnit]:
+        try:
+            self.wait("._pendo-guide-dismiss_.no-thanks", timeout=5).click()
+        except NoSuchElementException:
+            pass
 
         # Set media
         self.wait(".search-filter-media-type__trigger").click()
