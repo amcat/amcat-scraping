@@ -49,6 +49,7 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedupli
     login_username_field = "#username"
     login_password_field = "#password"
     login_error_selector = ".message.message--error"
+    allow_missing_login = True
 
     def click(self, element):
         try:
@@ -58,7 +59,12 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedupli
 
     def login(self, username, password):
         self.browser.get(self.login_url)
-        self.wait(self.cookies_ok_button).click()
+        try:
+            self.wait(self.cookies_ok_button).click()
+        except NoSuchElementException:
+            if self.allow_missing_login:
+                return True
+            raise
         return super(EPagesScraper, self).login(username, password)
 
     def get_url_and_date_from_unit(self, unit: EPagesUnit) -> Tuple[str, datetime.date]:

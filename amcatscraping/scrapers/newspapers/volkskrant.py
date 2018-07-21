@@ -26,3 +26,5 @@ class VolkskrantScraper(ad.EPagesScraper):
     cookies_ok_button = ".button--accept"
     login_url = "http://krant.volkskrant.nl/"
     publisher = "Volkskrant"
+    allow_missing_login = True
+
