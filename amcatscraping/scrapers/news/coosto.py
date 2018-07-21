@@ -224,7 +224,8 @@ class CoostoScraper(LoginMixin, DeduplicatingUnitScraper):
         date = iso8601.iso8601.parse_date(unit["datum"], default_timezone=None)
         hostname = urlparse(unit["url"]).hostname
         publisher = ".".join(hostname.split(".")[-2:])
-        article = Article(title=unit["titel"], text=unit["bericht tekst"], url=unit["url"], date=date)
+        title = unit["titel"].strip() or "[No title]"
+        article = Article(title=title, text=unit["bericht tekst"], url=unit["url"], date=date)
         article.set_property("author", unit["auteur"])
         article.set_property("publisher", publisher)
         return article
