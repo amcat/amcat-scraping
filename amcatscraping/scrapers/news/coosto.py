@@ -161,7 +161,10 @@ class CoostoScraper(LoginMixin, DeduplicatingUnitScraper):
                 self.wait(".flat_buttons > a").click()
 
             # Wait a bit for scripts to load
-            time.sleep(3)
+            time.sleep(5)
+
+            # Close (potential) changelog
+            webdriver.ActionChains(self.browser).send_keys(Keys.ESCAPE).perform()
 
             # Close all tabs
             self.wait(".tab_removeall").click()
