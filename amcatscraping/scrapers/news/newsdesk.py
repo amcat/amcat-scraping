@@ -164,16 +164,18 @@ class NewsdeskScraper(SeleniumLoginMixin, SeleniumMixin, DeduplicatingUnitScrape
         article_doc = lxml.html.fromstring(article_html, base_url=SEARCH_URL)
 
         def get_byline_prop(prop):
-            try:
-                return article_doc.cssselect(".article_byline__element.{}".format(prop))[0].text_content().strip()
-            except IndexError:
+            for meta_element in article_doc.cssselect(".article_byline__element.{}".format(prop)):
+                prop_value = meta_element.text_content().strip()
+                if prop_value:
+                    return prop_value
+            else:
                 raise ValueError("Article {} has no property '{}'.".format(title, prop))
 
         text_url = article_doc.cssselect("a.article_headline")[0].get("href")
         url = "newsdesk://{}".format(get_newsdesk_article_id(text_url))
 
         title = article_doc.cssselect("a.article_headline")[0].text_content().strip()
-        publisher = get_byline_prop("source_name")
+        publisher = get_byline_prop("source")
 
         date = get_byline_prop("harvest_date")
         date, pub_date = date.split("(gepubliceerd: ")
