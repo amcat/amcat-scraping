@@ -30,7 +30,7 @@ from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.common.by import By
 
 from amcat.models import Article
-from amcatscraping.scraper import SeleniumLoginMixin, SeleniumMixin, DeduplicatingUnitScraper
+from amcatscraping.scraper import SeleniumLoginMixin, SeleniumMixin, DeduplicatingUnitScraper, NotVisible
 from amcatscraping.tools import html2text
 
 NewsdeskUnit = namedtuple("NewsdeskUnit", ["article_element", "article"])
@@ -220,15 +220,22 @@ class NewsdeskScraper(SeleniumLoginMixin, SeleniumMixin, DeduplicatingUnitScrape
         else:
             self.wait(".fo-icon-compact.extract_full_link_button", on=article_element)
 
-        inner = self.wait(".extract_inner", on=article_element)
-        article_html = inner.get_attribute("innerHTML")
-        article.text = html2text(article_html)
+        try:
+            inner = self.wait(".extract_inner", on=article_element)
+        except NotVisible:
+            if article.get_property("wordcount_int") <= 1:
+                article.text = "[NO TEXT]"
+            else:
+                raise
+        else:
+            article_html = inner.get_attribute("innerHTML")
+            article.text = html2text(article_html)
 
-        # Cut off data urls at #3; no article actually has that many. All instances so far led to the same data (even
-        # though the url differed).
-        data_urls = list(get_data_urls(inner))[:3]
-        for i, data_url in enumerate(data_urls):
-            article.set_property("data{}_url".format(i), data_url)
+            # Cut off data urls at #3; no article actually has that many. All instances so far led to the same
+            # data (even though the url differed).
+            data_urls = list(get_data_urls(inner))[:3]
+            for i, data_url in enumerate(data_urls):
+                article.set_property("data{}_url".format(i), data_url)
 
         # Be gentle with servers
         time.sleep(random.uniform(0.1, 0.3))
