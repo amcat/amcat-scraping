@@ -227,6 +227,6 @@ class NewsdeskScraper(SeleniumLoginMixin, SeleniumMixin, DeduplicatingUnitScrape
             article.set_property("data{}_url".format(i), data_url)
 
         # Be gentle with servers
-        time.sleep(random.uniform(0.5, 1.5))
+        time.sleep(random.uniform(0.1, 0.3))
 
         return article
