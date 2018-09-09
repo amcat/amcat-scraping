@@ -92,7 +92,6 @@ class TelegraafScraper(LoginMixin, UnitScraper, DateRangeScraper):
             log.info("Logging in..")
             time.sleep(5)
             self.wait(".js-link-login > a").click()
-            self.browser.switch_to.frame(self.wait(".tglogin-overlay-window__iframe"))
             self.wait("#email").send_keys(self.username)
             self.wait("#password").send_keys(self.password)
             self.wait("#password").send_keys(Keys.RETURN)
