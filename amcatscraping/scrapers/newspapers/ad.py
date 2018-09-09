@@ -16,6 +16,7 @@
 # You should have received a copy of the GNU Lesser General Public        #
 # License along with AmCAT.  If not, see <http://www.gnu.org/licenses/>.  #
 ###########################################################################
+import time
 import datetime
 import locale
 
@@ -108,62 +109,69 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedupli
             seconds_forgone = (datetime.datetime.now() - start).total_seconds()
 
             try:
-                self.wait("#articleMenuItem").click()
+                self.wait("#articleMenuItem", timeout=60).click()
             except ElementClickInterceptedException:
                 pass
             else:
                 break
 
-        articles = list(self.browser.find_elements_by_css_selector(".articleListItem"))
-        for article in articles:
-            page = int(article.get_attribute("data-page"))
-            refid = article.get_attribute("data-refid")
-            url = urljoin(self.browser.current_url + "/", refid)
+        article_list_buttons = self.browser.find_elements_by_css_selector("#articleListSectionsButtons > button")
+        article_list_buttons = list(article_list_buttons) or [lambda: None]
 
-            def collect_headers(els):
-                for el in els:
-                    el_text = el.get_property("textContent").strip()
-                    if el_text:
-                        yield (el, el_text)
+        time.sleep(2)
 
-            h1s = list(collect_headers(article.find_elements_by_css_selector(".articleListItem > h1")))
-            h2s = list(collect_headers(article.find_elements_by_css_selector(".articleListItem > h2")))
-            h3s = list(collect_headers(article.find_elements_by_css_selector(".articleListItem > h3")))
+        for article_list_button in article_list_buttons:
+            article_list_button.click()
+            articles = list(self.browser.find_elements_by_css_selector(".articleListItem"))
+            for article in articles:
+                page = int(article.get_attribute("data-page"))
+                refid = article.get_attribute("data-refid")
+                url = urljoin(self.browser.current_url + "/", refid)
 
-            if h1s:
-                _, title = h1s.pop(0)
-            elif h2s:
-                _, title = h2s.pop(0)
-            else:
-                _, title = h3s.pop(0)
+                def collect_headers(els):
+                    for el in els:
+                        el_text = el.get_property("textContent").strip()
+                        if el_text:
+                            yield (el, el_text)
 
-            try:
-                content = article.find_element_by_css_selector("div.content").get_property("outerHTML")
-            except NoSuchElementException:
-                continue
+                h1s = list(collect_headers(article.find_elements_by_css_selector(".articleListItem > h1")))
+                h2s = list(collect_headers(article.find_elements_by_css_selector(".articleListItem > h2")))
+                h3s = list(collect_headers(article.find_elements_by_css_selector(".articleListItem > h3")))
 
-            subtitles = [element.get_property("outerHTML") for element, _ in h1s + h2s + h3s]
-            article_html = "".join(subtitles) + content
-            text = html2text(article_html)
+                if h1s:
+                    _, title = h1s.pop(0)
+                elif h2s:
+                    _, title = h2s.pop(0)
+                else:
+                    _, title = h3s.pop(0)
 
-            #try:
-            #    author = article.find_element_by_css_selector(".byline").get_property("textContent").strip()
-            #except NoSuchElementException:
-            #    pass
-            #else:
-            #    print(author)
+                try:
+                    content = article.find_element_by_css_selector("div.content").get_property("outerHTML")
+                except NoSuchElementException:
+                    continue
 
-            # Screenshot code:
-            # article.click()
-            # self.browser.switch_to_frame(self.wait("#articleViewContent > iframe"))
-            # screenshot = self.wait("#page article").screenshot_as_base64
-            # self.browser.switch_to_default_content()
-            # self.browser.switch_to_frame(self.wait("#issue"))
-            # self.wait("#articleNavigationBack").click()
-            # time.sleep(0.5)
-            screenshot = None
+                subtitles = [element.get_property("outerHTML") for element, _ in h1s + h2s + h3s]
+                article_html = "".join(subtitles) + content
+                text = html2text(article_html)
 
-            yield EPagesUnit(url, date, title, page, screenshot, text)
+                #try:
+                #    author = article.find_element_by_css_selector(".byline").get_property("textContent").strip()
+                #except NoSuchElementException:
+                #    pass
+                #else:
+                #    print(author)
+
+                # Screenshot code:
+                # article.click()
+                # self.browser.switch_to_frame(self.wait("#articleViewContent > iframe"))
+                # screenshot = self.wait("#page article").screenshot_as_base64
+                # self.browser.switch_to_default_content()
+                # self.browser.switch_to_frame(self.wait("#issue"))
+                # self.wait("#articleNavigationBack").click()
+                # time.sleep(0.5)
+                screenshot = None
+
+                yield EPagesUnit(url, date, title, page, screenshot, text)
 
     def get_deduplicate_units(self):
         for date in self.dates:
