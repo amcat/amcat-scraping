@@ -122,6 +122,7 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedupli
 
         for article_list_button in article_list_buttons:
             article_list_button.click()
+            time.sleep(2)
             articles = list(self.browser.find_elements_by_css_selector(".articleListItem"))
             for article in articles:
                 page = int(article.get_attribute("data-page"))
