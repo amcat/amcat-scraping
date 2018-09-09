@@ -84,7 +84,7 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedupli
             self.click(self.wait('//div[text() = "{}"]'.format(edition), by=By.XPATH))
 
         # Go to archive and select paper of this date
-        self.wait("#goToArchive").click()
+        self.wait("paper-button.showMoreButton").click()
 
         for archive_issue in self.browser.find_elements_by_css_selector("archive-issue"):
             try:
