@@ -16,6 +16,8 @@
 # You should have received a copy of the GNU Lesser General Public        #
 # License along with AmCAT.  If not, see <http://www.gnu.org/licenses/>.  #
 ###########################################################################
+from urllib.parse import urljoin
+
 import lxml.html
 import collections
 import itertools
@@ -100,11 +102,15 @@ class FinancieelDagbladScraper(LoginMixin, UnitScraper, DateRangeScraper):
             return
 
         overview = lxml.html.fromstring(response.content.decode())
-        for a in overview.cssselect("a"):
-            match = ARTICLE_URL_RE.match(a.get("href"))
-            if match:
-                url = parse.urljoin(BASE_URL, a.get('href'))
-                yield ArticleTuple(date, int(match.group("page_num")), url)
+        for publication in overview.cssselect(".digikrant-section a"):
+            publication_url = urljoin(paper_url, publication.get("href"))
+            paper = self.session.get_html(publication_url)
+
+            for a in paper.cssselect("a"):
+                match = ARTICLE_URL_RE.match(a.get("href"))
+                if match:
+                    url = parse.urljoin(BASE_URL, a.get('href'))
+                    yield ArticleTuple(date, int(match.group("page_num")), url)
 
     def get_units(self):
         pages = map(self._get_pages, self.dates)
@@ -132,7 +138,7 @@ class FinancieelDagbladScraper(LoginMixin, UnitScraper, DateRangeScraper):
 
         date = datetime.datetime(date.year, date.month, date.day)
         try:
-            title = text_doc.cssselect("article > h1")[0].text
+            title = text_doc.cssselect("article > h1")[0].text.strip()
         except:
             return None
 
