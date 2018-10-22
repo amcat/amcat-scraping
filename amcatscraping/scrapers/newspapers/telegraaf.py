@@ -58,7 +58,7 @@ class TelegraafScraper(LoginMixin, UnitScraper, DateRangeScraper):
     def __init__(self, username, password, **kwargs):
         super().__init__(username, password, **kwargs)
 
-    def wait(self, css_selector, timeout=30, visible=True):
+    def wait(self, css_selector, timeout=60, visible=True):
         start = datetime.datetime.now()
 
         while True:

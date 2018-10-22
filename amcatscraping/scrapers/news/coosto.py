@@ -63,7 +63,7 @@ class CoostoScraper(LoginMixin, DeduplicatingUnitScraper):
         self.continuous = True
         super().__init__(username, password, **kwargs)
 
-    def wait(self, selector, timeout=10, visible=True, by=By.CSS_SELECTOR):
+    def wait(self, selector, timeout=60, visible=True, by=By.CSS_SELECTOR):
         start = datetime.datetime.now()
 
         while True:
