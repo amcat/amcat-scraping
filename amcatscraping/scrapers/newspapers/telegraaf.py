@@ -16,165 +16,124 @@
 # You should have received a copy of the GNU Lesser General Public        #
 # License along with AmCAT.  If not, see <http://www.gnu.org/licenses/>.  #
 ###########################################################################
-
-import logging
-import itertools
-import collections
-import datetime
 import time
-import re
+import datetime
+import locale
+import time
 
-from datetime import date
-from selenium import webdriver
+from urllib.parse import urljoin
+
+from collections import namedtuple
 from typing import Tuple
 
-from selenium.common.exceptions import NoSuchElementException
+from selenium.common.exceptions import ElementClickInterceptedException, NoSuchElementException
+from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 
 from amcat.models import Article
-from amcatscraping.scraper import UnitScraper, DateRangeScraper, LoginMixin
-from amcatscraping.tools import parse_form, setup_logging
+from amcatscraping.scraper import SeleniumLoginMixin, SeleniumMixin, DeduplicatingUnitScraper, DateRangeScraper, NotVisible
+from amcatscraping.tools import html2text
 
-log = logging.getLogger(__name__)
-
-
-ArticleTuple = collections.namedtuple("Article", ["article_id", "pagenr", "section", "date"])
-
-ARTICLE_URL = "http://www.telegraaf.nl/telegraaf-i/article/{article_id}"
-LOGIN_URL = "https://www.telegraaf.nl/wuz/loginbox?nocache"
-WEEK_URL = "http://www.telegraaf.nl/telegraaf-i/week"
+TelegraafUnit = namedtuple("TelegraafUnit", ["url", "date", "section", "title", "text"])
 
 
-AUTHOR_RE = re.compile("^door (?P<author>.+)$")
+def dutch_strptime(date, pattern):
+    loc = locale.getlocale()
+    locale.setlocale(locale.LC_ALL, 'nl_NL.UTF-8')
+    try:
+        return datetime.datetime.strptime(date, pattern)
+    finally:
+        locale.setlocale(locale.LC_ALL, loc)
 
+class TelegraafScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, DeduplicatingUnitScraper):
+    cookies_ok_button = "form .CookiesOK"
+    editions = None
+    login_url = "https://digitalpublishing.telegraaf.nl/static/krant/#login"
+    login_username_field = "#id_email"
+    login_password_field = "#id_password"
+    login_error_selector = ".content > .error"
+    allow_missing_login = False
 
-def mkdate(string):
-    return date(*map(int, string.split("-")))
-
-
-class TelegraafScraper(LoginMixin, UnitScraper, DateRangeScraper):
-    publisher = "De Telegraaf"
-
-    def __init__(self, username, password, **kwargs):
-        super().__init__(username, password, **kwargs)
-
-    def wait(self, css_selector, timeout=60, visible=True):
-        start = datetime.datetime.now()
-
-        while True:
-            try:
-                element = self.browser.find_element_by_css_selector(css_selector)
-            except NoSuchElementException:
-                if (datetime.datetime.now() - start).total_seconds() > timeout:
-                    raise
-            else:
-                if not visible:
-                    return element
-                elif element.is_displayed():
-                    return element
-
-            time.sleep(0.5)
+    def click(self, element):
+        try:
+            element.click()
+        except ElementClickInterceptedException:
+            self.click(element.find_element_by_xpath(".."))
 
     def login(self, username, password):
-        # In the Telegraaf's eternal search for quality, they decided to rely on
-        # complicated inter-iframe communication and javascript logic to generate
-        # cookies needed to fetch articles. We therefore simulate logging in and
-        # reading an article with a real browser. We then steal them cookies and
-        # use it for normal scraping.
-        log.info("Starting Firefox..")
-        self.browser = webdriver.Firefox()
+        self.browser.get(self.login_url)
+        #try:
+        #    self.wait(self.cookies_ok_button).click()
+        #except NoSuchElementException:
+        #    if self.allow_missing_login:
+        #        return True
+        #    raise
+
+        self.wait(".Header-User__login-link").click()
+        self.wait(self.login_username_field).send_keys(username)
+        self.wait(self.login_password_field).send_keys(password)
+        self.wait(self.login_password_field).send_keys(Keys.ENTER)
 
         try:
-            self.browser.set_window_size(1920, 1080)
-            log.info("Selecting first article..")
-            self.browser.get("https://www.telegraaf.nl/telegraaf-i/")
-            self.wait(".newspapers > li").click()
-            log.info("Logging in..")
-            time.sleep(5)
-            self.wait(".js-link-login > a").click()
-            self.wait("#email").send_keys(self.username)
-            self.wait("#password").send_keys(self.password)
-            self.wait("#password").send_keys(Keys.RETURN)
-            self.browser.switch_to.default_content()
-            log.info("Wait for log in refresh..")
-            time.sleep(5)
-            self.wait(".js-link-username")
-            log.info("Waiting for article to load..")
-            self.wait(".pages > .page > .article")
-
-            log.info("Copying cookies..")
-            for cookie in self.browser.get_cookies():
-                cookie.pop("expiry")
-                cookie.pop("httpOnly")
-                self.session.cookies.set(**cookie)
-
+            self.wait(self.login_error_selector, timeout=2)
+        except (NoSuchElementException, NotVisible):
             return True
-        finally:
-            self.browser.quit()
+        else:
+            return False
 
-    def get_units(self):
-        data = self.session.get("http://www.telegraaf.nl/telegraaf-i/newspapers").json()
-        papers = [paper for paper in data if mkdate(paper['date']) in self.dates]
+    def get_url_and_date_from_unit(self, unit: TelegraafUnit) -> Tuple[str, datetime.date]:
+        return unit.url, unit.date
 
-        for paper in papers:
-            for page in paper['pages']:
-                for article_id in page['articles']:
-                    section = [s['title'] for s in paper['sections'] if page['page_number'] in s['pages']][0]
-                    yield ArticleTuple(article_id, page['page_number'], section, mkdate(paper['date']))
+    def get_deduplicate_key_from_article(self, article: Article) -> str:
+        return article.url
 
-    def get_url_and_date_from_unit(self, unit: ArticleTuple) -> Tuple[str, datetime.date]:
-        return ARTICLE_URL.format(article_id=unit.article_id), unit.date
+    def get_deduplicate_key_from_unit(self, unit: TelegraafUnit) -> str:
+        return unit.url
 
-    def scrape_unit(self, article):
-        article_id, pagenr, section, date = article
-
-        if section == "Advertentie":
-            return None
-
-        url = ARTICLE_URL.format(article_id=article_id)
-
-        data = collections.defaultdict(str, **self.session.get(url).json())
-        if list(data.keys()) == ["authenticate_url"]:
-            raise Exception("Login for Telegraaf failed")
-
-        if not data.get('headline'):
-            return None
-
-        article = Article(url=url, title=data.get("headline"), date=date)
-        article.set_property("section", section)
-        article.set_property("pagenr_int", int(pagenr))
-
-        body = dict.fromkeys(itertools.chain.from_iterable(data["body"]), "")
-
-        for dic in data['body']:
-            for k, v in dic.items():
-                body[k] += v + "\n\n"
-
-        lead = body.get("lead", "")
-        byline = body.get("paragraph") or body.get("byline", "")
-        article.text = lead + byline
-
-        if not article.text:
-            return None
-
-        if body.get("subheadline"):
-            article.set_property("subheadline", body.get("subheadline"))
-
-        if body.get("media-caption"):
-            article.set_property("mediacaption", body.get("media-caption"))
-
-        newspaper_id = "/{}/".format(data["newspaper_id"])
-        article.set_property("text_url", article.url.replace("/article/", newspaper_id))
-        article.set_property("image_url", article.url.replace("/article/", newspaper_id) + "/original")
-
-        author_match = AUTHOR_RE.match(article.text.splitlines()[0])
-        if author_match:
-            article.set_property("author", author_match.groupdict()["author"].strip())
-            article.text = "\n".join(article.text.splitlines()[1:]).strip()
-
-        return article
+    def _get_deduplicate_units(self, date, edition=None):
+        self.browser.get("https://digitalpublishing.telegraaf.nl/static/krant/")
 
 
-if __name__ == "__main__":
-    setup_logging()
-    TelegraafScraper().run()
+        found = False
+        for day_container in self.browser.find_elements_by_css_selector(".Day__date-container"):
+            paper_date_string = " ".join(day_container.text.split()[1:3] + ["2018"])
+            paper_date = dutch_strptime(paper_date_string, "%d %B %Y").date()
+            print(paper_date_string, paper_date, date, paper_date==date)
+            if date == paper_date:
+                self.wait(".Day__button", on=day_container).click()
+                found = True
+                break 
+
+        if found:
+            time.sleep(3)
+            self.wait("#nav-list").click()
+            time.sleep(3)
+            for section_container in self.browser.find_elements_by_css_selector(".article-list-container .section-list-container"):
+                section = section_container.find_elements_by_css_selector("h3")[0].text.strip()
+                for article_section in section_container.find_elements_by_css_selector("li.article-list-item a"):
+                    title = article_section.text.strip()
+                    article_section.click()
+                    self.browser.switch_to_frame(self.wait("#article-holder iframe"))
+                    article_html = self.wait("body").get_property("outerHTML")
+                    text = html2text(article_html)
+                    self.browser.switch_to_default_content()
+                    url = self.browser.current_url
+
+                    yield TelegraafUnit(url, date, section, title, text)
+
+    def get_deduplicate_units(self):
+        for date in self.dates:
+            if self.editions is not None:
+                for edition in self.editions:
+                    yield from self._get_deduplicate_units(date, edition)
+            else:
+                yield from self._get_deduplicate_units(date)
+
+    def scrape_unit(self, unit: TelegraafUnit):
+        return Article(
+            title=unit.title,
+            url=unit.url,
+            text=unit.text,
+            date=unit.date,
+            section=unit.section
+        )
