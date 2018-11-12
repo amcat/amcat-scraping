@@ -67,7 +67,7 @@ class GenericScraper(SeleniumMixin, DeduplicatingUnitScraper):
         "Cookie_Category_Recommendations": "false",
         "Cookie_Category_Social": "false",
         "Cookie_Consent": "false",
-        "nl_cookiewall_version": "1",
+        "nl_cookiewall_version": "4",
         "cookieconsent": "true",
         "nmt_closed_cookiebar": "1",
         "accept_cookies": "1",
