@@ -16,10 +16,12 @@
 # You should have received a copy of the GNU Lesser General Public        #
 # License along with AmCAT.  If not, see <http://www.gnu.org/licenses/>.  #
 ###########################################################################
+import hashlib
 import time
 import datetime
 import locale
 import time
+from urllib import parse
 
 from urllib.parse import urljoin
 
@@ -34,7 +36,7 @@ from amcat.models import Article
 from amcatscraping.scraper import SeleniumLoginMixin, SeleniumMixin, DeduplicatingUnitScraper, DateRangeScraper, NotVisible
 from amcatscraping.tools import html2text
 
-TelegraafUnit = namedtuple("TelegraafUnit", ["url", "date", "section", "title", "text"])
+TelegraafUnit = namedtuple("TelegraafUnit", ["url", "date", "title", "text", "page_range"])
 
 
 def dutch_strptime(date, pattern):
@@ -90,9 +92,11 @@ class TelegraafScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedu
     def get_deduplicate_key_from_unit(self, unit: TelegraafUnit) -> str:
         return unit.url
 
+    def next_button(self):
+        return self.wait("#next-page-button", visible=False)
+
     def _get_deduplicate_units(self, date, edition=None):
         self.browser.get("https://digitalpublishing.telegraaf.nl/static/krant/")
-
 
         found = False
         for day_container in self.browser.find_elements_by_css_selector(".Day__date-container"):
@@ -105,21 +109,32 @@ class TelegraafScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedu
                 break 
 
         if found:
-            time.sleep(3)
-            self.wait("#nav-list").click()
-            time.sleep(3)
-            for section_container in self.browser.find_elements_by_css_selector(".article-list-container .section-list-container"):
-                section = section_container.find_elements_by_css_selector("h3")[0].text.strip()
-                for article_section in section_container.find_elements_by_css_selector("li.article-list-item a"):
-                    title = article_section.text.strip()
-                    article_section.click()
-                    self.browser.switch_to_frame(self.wait("#article-holder iframe"))
+            self.wait("#next-page-button")
+            while self.next_button().is_displayed():
+                for article in self.browser.find_elements_by_css_selector(".pages-swiper-slide-active .article-layer"):
+                    article.click()
+                    time.sleep(0.5)
+
+                    self.browser.switch_to_frame(self.wait("iframe.article-contents"))
                     article_html = self.wait("body").get_property("outerHTML")
                     text = html2text(article_html)
-                    self.browser.switch_to_default_content()
                     url = self.browser.current_url
+                    (scheme, netloc, path, params, query, fragment) = parse.urlparse(url)
+                    query += "&hash=" + hashlib.sha256(article_html.encode()).hexdigest()[:20]
+                    url = parse.urlunparse((scheme, netloc, path, params, query, fragment))
+                    page_range = fragment.split("/")[-1]
+                    title = self.wait("body > .head").text.strip()
+                    self.browser.switch_to_default_content()
 
-                    yield TelegraafUnit(url, date, section, title, text)
+                    # Close modal
+                    self.wait(".article-modal-default-button").click()
+
+                    yield TelegraafUnit(url, date, title, text, page_range)
+                    time.sleep(0.5)
+
+
+                self.next_button().click()
+                time.sleep(0.5)
 
     def get_deduplicate_units(self):
         for date in self.dates:
@@ -135,5 +150,5 @@ class TelegraafScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedu
             url=unit.url,
             text=unit.text,
             date=unit.date,
-            section=unit.section
+            pagerange=unit.page_range
         )
