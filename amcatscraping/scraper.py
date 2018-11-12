@@ -185,7 +185,8 @@ class Scraper(object):
             articleset=self.articleset_id,
             on_date=date.isoformat(),
             minimal=1,
-            col=["url"]
+            col=["url"],
+            page_size=9999
         )))
 
     def deduplicate(self, articles: Iterable[Article]) -> Iterable[Article]:
