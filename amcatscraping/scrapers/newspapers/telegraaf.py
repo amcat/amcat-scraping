@@ -48,6 +48,7 @@ def dutch_strptime(date, pattern):
         locale.setlocale(locale.LC_ALL, loc)
 
 class TelegraafScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, DeduplicatingUnitScraper):
+    publisher = "De Telegraaf"
     cookies_ok_button = "form .CookiesOK"
     editions = None
     login_url = "https://digitalpublishing.telegraaf.nl/static/krant/#login"
@@ -112,8 +113,8 @@ class TelegraafScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedu
             self.wait("#next-page-button")
             while self.next_button().is_displayed():
                 for article in self.browser.find_elements_by_css_selector(".pages-swiper-slide-active .article-layer"):
-                    article.click()
-                    time.sleep(0.5)
+                    self.click(article)
+                    time.sleep(1.5)
 
                     self.browser.switch_to_frame(self.wait("iframe.article-contents"))
                     article_html = self.wait("body").get_property("outerHTML")
