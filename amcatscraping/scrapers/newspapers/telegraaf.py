@@ -124,14 +124,20 @@ class TelegraafScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedu
                     query += "&hash=" + hashlib.sha256(article_html.encode()).hexdigest()[:20]
                     url = parse.urlunparse((scheme, netloc, path, params, query, fragment))
                     page_range = fragment.split("/")[-1]
-                    title = self.wait("body > .head").text.strip()
-                    self.browser.switch_to_default_content()
 
-                    # Close modal
-                    self.wait(".article-modal-default-button").click()
+                    try:
+                        title = self.wait("body > .head", timeout=2).text.strip()
+                    except:
+                        continue
+                    else:
+                        yield TelegraafUnit(url, date, title, text, page_range)
+                    finally:
+                        self.browser.switch_to_default_content()
 
-                    yield TelegraafUnit(url, date, title, text, page_range)
-                    time.sleep(0.5)
+                        # Close modal
+                        self.wait(".article-modal-default-button").click()
+
+                        time.sleep(0.5)
 
 
                 self.next_button().click()

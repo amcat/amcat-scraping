@@ -33,7 +33,7 @@ import atexit
 from typing import Iterable, List, Optional, Any, Union, Tuple, Set
 
 from selenium import webdriver
-from selenium.common.exceptions import NoSuchElementException
+from selenium.common.exceptions import NoSuchElementException, StaleElementReferenceException
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.by import By
 
@@ -622,9 +622,11 @@ class SeleniumLoginMixin(LoginMixin):
         self.wait(self.login_password_field).send_keys(password)
         self.wait(self.login_password_field).send_keys(Keys.ENTER)
 
+        time.sleep(2)
+
         try:
-            self.wait(self.login_error_selector, timeout=2)
-        except (NoSuchElementException, NotVisible):
+            self.wait(self.login_error_selector, timeout=3)
+        except (NoSuchElementException, NotVisible, StaleElementReferenceException):
             return True
         else:
             return False
