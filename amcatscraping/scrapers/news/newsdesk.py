@@ -84,15 +84,6 @@ class NewsdeskScraper(SeleniumLoginMixin, SeleniumMixin, DeduplicatingUnitScrape
 
         self.browser.get(SEARCH_URL)
 
-        # Enable beta search interface
-        self.wait(".switch__input", visible=False)
-        beta_script = 'return document.getElementsByClassName("switch__input")[0].checked;'
-        beta_enabled = self.browser.execute_script(beta_script)
-        if not beta_enabled:
-            self.wait(".switch__icon").click()
-            self.wait(".toast")
-            self.browser.get(SEARCH_URL)
-
     def get_deduplicate_key_from_unit(self, unit: NewsdeskUnit) -> str:
         return unit.article.url
 
@@ -115,7 +106,7 @@ class NewsdeskScraper(SeleniumLoginMixin, SeleniumMixin, DeduplicatingUnitScrape
         self.wait(".search-filter-language__trigger").click()
         self.wait(".search-filter-container__filter-button--clear").click()
         for language in LANGUAGES:
-            self.wait('label[title="{}"]'.format(language)).click()
+            self.wait('//label[text() = "{}"]'.format(language), by=By.XPATH).click()
 
         # Set 'search in last 24 hours'
         self.wait(".search-filter-date__trigger").click()
@@ -218,7 +209,7 @@ class NewsdeskScraper(SeleniumLoginMixin, SeleniumMixin, DeduplicatingUnitScrape
         except NoSuchElementException:
             pass
         else:
-            self.wait(".fo-icon-compact.extract_full_link_button", on=article_element)
+            self.wait(".extract_full_link_button", on=article_element)
 
         try:
             inner = self.wait(".extract_inner", on=article_element)

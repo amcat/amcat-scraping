@@ -50,7 +50,7 @@ log = logging.getLogger(__name__)
 LOGIN_URL = "https://in.coosto.com/enter/signin"
 
 MEDIUMS = [
-    "Landelijke Media G2018"
+    "Nieuwsmedia"
 ]
 
 class NotVisible(Exception):
@@ -60,7 +60,7 @@ class CoostoScraper(LoginMixin, DeduplicatingUnitScraper):
     publisher = None # Will be set by scraper
 
     def __init__(self, username, password, **kwargs):
-        self.continuous = True
+        self.continuous = False
         super().__init__(username, password, **kwargs)
 
     def wait(self, selector, timeout=60, visible=True, by=By.CSS_SELECTOR):
