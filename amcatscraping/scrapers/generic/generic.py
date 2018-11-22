@@ -306,7 +306,7 @@ class NOS(GenericScraper):
 
 class RTLNieuws(GenericScraper):
     index_url = "https://www.rtlnieuws.nl/"
-    article_url_cssselector = "h1.article__title a"
+    article_url_cssselector = "#net-binnen > .tabs-item > a"
     article_url_re = ".+"
 
     def __init__(self, *args, **kwargs):
