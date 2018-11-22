@@ -77,6 +77,8 @@ class TelegraafScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedu
         self.wait(self.login_password_field).send_keys(password)
         self.wait(self.login_password_field).send_keys(Keys.ENTER)
 
+        time.sleep(3)
+
         try:
             self.wait(self.login_error_selector, timeout=2)
         except (NoSuchElementException, NotVisible):
