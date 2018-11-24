@@ -583,7 +583,8 @@ class SeleniumMixin(object):
                     for e in elements:
                         if e.is_displayed():
                             return e
-                elif seconds_forgone > timeout:
+
+                if seconds_forgone > timeout:
                     raise NotVisible("Element present, but not visible: {}".format(selector))
 
             time.sleep(0.5)

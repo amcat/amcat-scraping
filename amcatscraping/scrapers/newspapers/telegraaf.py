@@ -118,7 +118,12 @@ class TelegraafScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedu
                     self.click(article)
                     time.sleep(1.5)
 
-                    self.browser.switch_to_frame(self.wait("iframe.article-contents"))
+                    try:
+                        self.browser.switch_to_frame(self.wait("iframe.article-contents", timeout=10))
+                    except NotVisible:
+                        print("Warning: article skipped because frame was not visible")
+                        continue
+
                     article_html = self.wait("body").get_property("outerHTML")
                     text = html2text(article_html)
                     url = self.browser.current_url
