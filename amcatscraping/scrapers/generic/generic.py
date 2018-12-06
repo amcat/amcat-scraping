@@ -381,8 +381,9 @@ class PW(GenericScraper):
         return date
 
 class Radar(GenericScraper):
+    has_ccm_cookies = True
     index_url = "https://radar.avrotros.nl/nieuws/"
-    article_url_re = "/nieuws/detail/[\w-]+"
+    article_url_re = "/nieuws/item/[\w-]+"
 
     def get_date(self, doc):
         date = doc.cssselect("article time")[0].get("datetime")
