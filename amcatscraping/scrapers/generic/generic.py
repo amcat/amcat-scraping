@@ -56,19 +56,12 @@ class GenericScraper(SeleniumMixin, DeduplicatingUnitScraper):
     index_url = None
     article_url_re = None
     article_url_cssselector = "a"
+    has_ccm_cookies = False
     cookies = None
 
     # Cookies know to prevent banners
     default_cookies = {
-        "Cookie_Category_Advertising" : "false",
-        "Cookie_Category_Analytics" : "false",
-        "Cookie_Category_Miscellaneous" : "false",
-        "Cookie_Category_Necessary" : "true",
-        "Cookie_Category_Recommendations": "false",
-        "Cookie_Category_Social": "false",
-        "Cookie_Consent": "false",
         "nl_cookiewall_version": "4",
-        "cookieconsent": "true",
         "nmt_closed_cookiebar": "1",
         "accept_cookies": "1",
         "cookieconsent_dismissed": "yes"
@@ -87,6 +80,7 @@ class GenericScraper(SeleniumMixin, DeduplicatingUnitScraper):
         super().setup_session()
 
         self.browser.get(self.index_url)
+        self.wait("html")
 
         if self.cookies:
             for name, morsel in http.cookies.BaseCookie(self.cookies).items():
@@ -118,11 +112,14 @@ class GenericScraper(SeleniumMixin, DeduplicatingUnitScraper):
         units = index.cssselect(self.article_url_cssselector)
         n_units = len(units)
 
+        seen = set()
         for i, a in enumerate(units):
             absolute_url = urljoin(self.index_url, a.get("href"))
             if self.article_url_re.search(absolute_url):
-                print("{}/{}: {}".format(i, n_units, absolute_url))
-                yield absolute_url
+                if absolute_url not in seen:
+                    print("{}/{}: {}".format(i, n_units, absolute_url))
+                    yield absolute_url
+                seen.add(absolute_url)
 
     def scrape_unit(self, url):
         reader_url = "about:reader?url={}".format(url)
@@ -184,8 +181,12 @@ class Nu(GenericScraper):
     index_url = "https://www.nu.nl"
     article_url_re = "/[\w-]+/[0-9]+/.+.html"
 
+    def setup_session(self):
+        super(Nu, self).setup_session()
+        self.wait("#sanoma-consent-accept-button").click()
+
     def get_date(self, doc):
-        date = doc.cssselect(".footer .published .small")[0].text_content().strip()
+        date = doc.cssselect(".pubdate.large")[0].text_content().strip()
         date = datetime.datetime.strptime(date, '%d-%m-%y %H:%M')
         return date
  
@@ -265,7 +266,7 @@ class NRCBinnenland(SeleniumLoginMixin, GenericScraper):
         return doc
 
     def get_date(self, doc):
-        date = doc.cssselect("header .date time")[0].get("datetime")
+        date = doc.cssselect(".article__byline__text.prettydate")[0].get("datetime")
         return iso8601.iso8601.parse_date(date, default_timezone=None)
 
 class Telegraaf(SeleniumLoginMixin, GenericScraper):
@@ -347,6 +348,7 @@ class SocialeVraagstukken(GenericScraper):
 class Zembla(GenericScraper):
     index_url = "https://zembla.bnnvara.nl/nieuws"
     article_url_re = "/nieuws/[\w-]+"
+    has_ccm_cookies = True
 
     def get_date(self, doc):
         date = doc.cssselect("time.date")[0].get("datetime")
@@ -361,6 +363,7 @@ class DeMonitor(GenericScraper):
         return dutch_strptime(date, "%A %d %B %Y")
 
 class Kassa(GenericScraper):
+    has_ccm_cookies = True
     index_url = "https://kassa.bnnvara.nl/nieuws"
     article_url_re = "/nieuws/[\w-]+"
 
