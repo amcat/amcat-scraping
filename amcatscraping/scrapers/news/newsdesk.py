@@ -151,8 +151,8 @@ class NewsdeskScraper(SeleniumLoginMixin, SeleniumMixin, DeduplicatingUnitScrape
                 else:
                     next_page_button.click()
 
-    def get_url_and_date_from_unit(self, unit: NewsdeskUnit) -> Tuple[str, datetime.date]:
-        return unit.article.url, unit.article.date
+    def get_url_from_unit(self, unit: NewsdeskUnit) -> str:
+        return unit.article.url
 
     def scrape_unit_meta(self, article_element):
         article_html = article_element.get_attribute("outerHTML")

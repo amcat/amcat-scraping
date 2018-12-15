@@ -16,6 +16,7 @@
 # You should have received a copy of the GNU Lesser General Public        #
 # License along with AmCAT.  If not, see <http://www.gnu.org/licenses/>.  #
 ###########################################################################
+import json
 import time
 import datetime
 import locale
@@ -25,8 +26,8 @@ from urllib.parse import urljoin
 from collections import namedtuple
 from typing import Tuple
 
-from selenium.common.exceptions import ElementClickInterceptedException, NoSuchElementException
-from selenium.webdriver.common.by import By
+from selenium.common.exceptions import ElementClickInterceptedException, \
+    NoSuchElementException, WebDriverException
 
 from amcat.models import Article
 from amcatscraping.scraper import SeleniumLoginMixin, SeleniumMixin, DeduplicatingUnitScraper, DateRangeScraper
@@ -57,6 +58,13 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedupli
             element.click()
         except ElementClickInterceptedException:
             self.click(element.find_element_by_xpath(".."))
+        except WebDriverException as e:
+            if "Other element would receive the click" in str(e):
+                self.click(element.find_element_by_xpath(".."))
+            raise
+
+    def click_script(self, el):
+        return self.browser.execute_script("return arguments[0].click();", el)
 
     def login(self, username, password):
         self.browser.get(self.login_url)
@@ -68,8 +76,27 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedupli
             raise
         return super(EPagesScraper, self).login(username, password)
 
-    def get_url_and_date_from_unit(self, unit: EPagesUnit) -> Tuple[str, datetime.date]:
-        return unit.url, unit.date
+    def shadow(self, selectors):
+        *selectors, last_selector = selectors
+        selectors = ['querySelector("{}").shadowRoot'.format(s) for s in selectors]
+        script = 'return document.{}.querySelector("{}");'.format(".".join(selectors), last_selector)
+
+        n = 0
+        while True:
+            try:
+                return self.browser.execute_script(script)
+            except Exception as e:
+                if n == 7:
+                    raise
+                else:
+                    n += 1
+                    time.sleep(n)
+
+    def shadow_root(self, element, selector):
+        return self.browser.execute_script("return arguments[0].shadowRoot.querySelector(arguments[1]);", element, selector)
+
+    def get_url_from_unit(self, unit: EPagesUnit) -> str:
+        return unit.url
 
     def get_deduplicate_key_from_article(self, article: Article) -> str:
         return article.url
@@ -82,52 +109,53 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedupli
         self.browser.get(self.login_url)
 
         if edition is not None:
-            self.click(self.wait('//div[text() = "{}"]'.format(edition), by=By.XPATH))
+            regions = self.shadow(["#main", "#main", "#regionPicker", "#mainContainer"])
+            for button in regions.find_elements_by_css_selector("paper-button"):
+                name = json.loads(button.get_attribute("data-region"))["name"]
+                if name == edition:
+                    self.click(button)
 
         # Go to archive and select paper of this date
-        self.wait("paper-button.showMoreButton").click()
+        main = self.shadow(["#main", "#main", "#coverView", "#others"])
+        self.click_script(self.wait("paper-button.showMoreButton", on=main))
 
-        for archive_issue in self.browser.find_elements_by_css_selector("archive-issue"):
-            try:
-                archive_date = archive_issue.find_element_by_css_selector(".issueDate").text.strip()
-            except NoSuchElementException:
-                continue
+        archive = self.shadow(["#main", "#main", "#archiveView", "#currentPage"])
+
+        time.sleep(2)
+        self.wait("archive-issue", on=archive)
+
+        for archive_issue in archive.find_elements_by_css_selector("archive-issue"):
+            archive_date = self.shadow_root(archive_issue, ".issueDate").text.strip()
             if not archive_date:
                 continue
             if dutch_strptime(archive_date, "%d %B %Y").date() == date:
-                archive_issue.click()
+                self.click(archive_issue)
                 break
         else:
             return
 
         # Scrape unit
-        self.browser.switch_to_frame(self.wait("#issue"))
-
-        seconds_forgone = 0
-        start = datetime.datetime.now()
-        while seconds_forgone < 30:
-            seconds_forgone = (datetime.datetime.now() - start).total_seconds()
-
-            try:
-                self.wait("#articleMenuItem", timeout=60).click()
-            except ElementClickInterceptedException:
-                pass
-            else:
-                break
-
-        article_list_buttons = self.browser.find_elements_by_css_selector("#articleListSectionsButtons > button")
-        article_list_buttons = list(article_list_buttons) or [lambda: None]
+        time.sleep(2)
+        iframe = self.shadow(["#main", "#main", "issue-view", "#issue"])
+        self.browser.switch_to_frame(iframe)
+        self.click_script(self.wait("#articleMenuItem"))
 
         time.sleep(2)
 
+        article_list_buttons = self.browser.find_elements_by_css_selector("#articleListSectionsButtons > button")
+        article_list_buttons = list(article_list_buttons) or [None]
+
         for article_list_button in article_list_buttons:
-            article_list_button.click()
+            if article_list_button is not None:
+                self.click_script(article_list_button)
             time.sleep(2)
             articles = list(self.browser.find_elements_by_css_selector(".articleListItem"))
             for article in articles:
                 page = int(article.get_attribute("data-page"))
                 refid = article.get_attribute("data-refid")
                 url = urljoin(self.browser.current_url + "/", refid)
+
+                print(url)
 
                 def collect_headers(els):
                     for el in els:
@@ -190,6 +218,7 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedupli
             pagenr_int=unit.page,
             date=unit.date
         )
+
 
 class AlgemeenDagbladScraper(EPagesScraper):
     cookies_ok_button = "a.fjs-accept"

@@ -17,26 +17,22 @@
 # License along with AmCAT.  If not, see <http://www.gnu.org/licenses/>.  #
 ###########################################################################
 import hashlib
-import time
 import datetime
 import locale
 import time
 from urllib import parse
 
-from urllib.parse import urljoin
 
 from collections import namedtuple
-from typing import Tuple
 
 from selenium.common.exceptions import ElementClickInterceptedException, NoSuchElementException
-from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 
 from amcat.models import Article
 from amcatscraping.scraper import SeleniumLoginMixin, SeleniumMixin, DeduplicatingUnitScraper, DateRangeScraper, NotVisible
 from amcatscraping.tools import html2text
 
-TelegraafUnit = namedtuple("TelegraafUnit", ["url", "date", "title", "text", "page_range"])
+TelegraafUnit = namedtuple("TelegraafUnit", ["article_element", "url", "date", "page_range"])
 
 
 def dutch_strptime(date, pattern):
@@ -63,6 +59,9 @@ class TelegraafScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedu
         except ElementClickInterceptedException:
             self.click(element.find_element_by_xpath(".."))
 
+    def click_script(self, el):
+        return self.browser.execute_script("return arguments[0].click();", el)
+
     def login(self, username, password):
         self.browser.get(self.login_url)
         #try:
@@ -86,8 +85,8 @@ class TelegraafScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedu
         else:
             return False
 
-    def get_url_and_date_from_unit(self, unit: TelegraafUnit) -> Tuple[str, datetime.date]:
-        return unit.url, unit.date
+    def get_url_from_unit(self, unit: TelegraafUnit) -> str:
+        return unit.url
 
     def get_deduplicate_key_from_article(self, article: Article) -> str:
         return article.url
@@ -115,40 +114,17 @@ class TelegraafScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedu
             self.wait("#next-page-button")
             while self.next_button().is_displayed():
                 for article in self.browser.find_elements_by_css_selector(".pages-swiper-slide-active .article-layer"):
-                    self.click(article)
-                    time.sleep(1.5)
-
-                    try:
-                        self.browser.switch_to_frame(self.wait("iframe.article-contents", timeout=10))
-                    except NotVisible:
-                        print("Warning: article skipped because frame was not visible")
-                        continue
-
-                    article_html = self.wait("body").get_property("outerHTML")
-                    text = html2text(article_html)
+                    id = article.get_property("id")
                     url = self.browser.current_url
                     (scheme, netloc, path, params, query, fragment) = parse.urlparse(url)
-                    query += "&hash=" + hashlib.sha256(article_html.encode()).hexdigest()[:20]
-                    url = parse.urlunparse((scheme, netloc, path, params, query, fragment))
                     page_range = fragment.split("/")[-1]
-
-                    try:
-                        title = self.wait("body > .head", timeout=2).text.strip()
-                    except:
-                        continue
-                    else:
-                        yield TelegraafUnit(url, date, title, text, page_range)
-                    finally:
-                        self.browser.switch_to_default_content()
-
-                        # Close modal
-                        self.wait(".article-modal-default-button").click()
-
-                        time.sleep(0.5)
-
+                    query += "&hash=" + hashlib.sha256(str((id, date, page_range)).encode()).hexdigest()[:20]
+                    url = parse.urlunparse((scheme, netloc, path, params, query, fragment))
+                    print(url)
+                    yield TelegraafUnit(article, url, date, page_range)
 
                 self.next_button().click()
-                time.sleep(0.5)
+                time.sleep(5)
 
     def get_deduplicate_units(self):
         for date in self.dates:
@@ -159,10 +135,36 @@ class TelegraafScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedu
                 yield from self._get_deduplicate_units(date)
 
     def scrape_unit(self, unit: TelegraafUnit):
+        article, url, date, page_range = unit
+
+        self.click_script(article)
+        time.sleep(1.5)
+
+        try:
+            self.browser.switch_to_frame(self.wait("iframe.article-contents", timeout=10))
+        except NotVisible:
+            print("Warning: article skipped because frame was not visible")
+            return None
+
+        article_html = self.wait("body").get_property("outerHTML")
+        text = html2text(article_html)
+
+        try:
+            title = self.wait("body > .head", timeout=2).text.strip()
+        except:
+            return None
+        finally:
+            self.browser.switch_to_default_content()
+
+            # Close modal
+            self.wait(".article-modal-default-button").click()
+
+            time.sleep(1.5)
+
         return Article(
-            title=unit.title,
-            url=unit.url,
-            text=unit.text,
-            date=unit.date,
-            pagerange=unit.page_range
+            title=title,
+            url=url,
+            text=text,
+            date=date,
+            pagerange=page_range
         )

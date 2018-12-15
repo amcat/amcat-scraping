@@ -80,8 +80,8 @@ class GeenstijlScraper(DeduplicatingUnitScraper, DateRangeScraper):
                 if article_url not in IGNORE_URLS:
                     yield date, article_url
 
-    def get_url_and_date_from_unit(self, unit):
-        return unit[::-1]
+    def get_url_from_unit(self, unit):
+        return unit[1]
 
     def _get_archive(self, date):
         """Fill article-link cache with all articles written in the same month as 'date'"""

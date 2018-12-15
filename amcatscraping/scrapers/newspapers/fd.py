@@ -118,10 +118,11 @@ class FinancieelDagbladScraper(LoginMixin, UnitScraper, DateRangeScraper):
         pages = map(sorted, pages)
         return itertools.chain.from_iterable(pages)
 
-    def get_url_and_date_from_unit(self, unit: ArticleTuple) -> Tuple[str, datetime.date]:
-        return unit.url, unit.date
+    def get_url_from_unit(self, unit: ArticleTuple) -> str:
+        return unit.url
 
     def scrape_unit(self, article_info: ArticleTuple):
+        print(article_info)
         date, page_num, url = article_info
 
         try:

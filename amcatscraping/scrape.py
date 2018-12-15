@@ -30,7 +30,10 @@ Options:
   --from=<date>            Scrape articles from date (default: today)
   --to=<date>              Scrape articles up to and including date (default: today)
   --dry-run                Do not commit to database
+  --no-headless            Instruct Chromium to create window
   --no-deduplicate-on-url  Do not dedpulicate based on URL
+  --use-http-url-db        Instead of running expensive queries, use precached
+                           http url cache, stored at https://example-amcat.nl/media/urls/
   --batch-size=<n>         If running in batched mode, this determines the batch size. For continuous
                            scrapers a low value is suitable for "real-time" purposes (default: 100).
   --update                 Update comment threads of existing articles
@@ -56,6 +59,7 @@ from iso8601.iso8601 import parse_date
 from email.utils import formatdate
 from django.core.mail import EmailMultiAlternatives, get_connection
 from amcatscraping.tools import get_boolean, to_date
+from amcatscraping.scraper import SeleniumMixin
 
 
 JINJA_ENV = jinja2.Environment(loader=jinja2.PackageLoader('amcatscraping', 'templates'))
@@ -130,6 +134,7 @@ def run_single(config, args, scraper_config, scraper_class):
         "max_date": max_date,
         "dry_run": args["--dry-run"],
         "deduplicate_on_url": not args["--no-deduplicate-on-url"],
+        "use_http_url_db": args["--use-http-url-db"],
         "batch_size": int(args.get("--batch-size") or 100)
     }
 
@@ -143,18 +148,32 @@ def run_single(config, args, scraper_config, scraper_class):
             del raw_opts[opt]
 
     opts["options"] = raw_opts
-    scraper = scraper_class(**opts)
     method = "run_update" if args["--update"] else "run"
 
     try:
-        return list(getattr(scraper, method)()), False
-    except NotImplementedError:
-        if args["--update"]:
-            log.info("Updating not implemented for {scraper_class.__name__}".format(**locals()))
-        else:
+        scraper = scraper_class(**opts)
+    except:
+        log.exception("Constructing scraper {scraper_class.__name__} resulted in an exception:".format(**locals()))
+    else:
+        try:
+            scraper.setup_session()
+            return list(getattr(scraper, method)()), False
+        except NotImplementedError:
+            if args["--update"]:
+                log.info("Updating not implemented for {scraper_class.__name__}".format(**locals()))
+            else:
+                log.exception("Running scraper {scraper_class.__name__} resulted in an exception:".format(**locals()))
+        except Exception as e:
             log.exception("Running scraper {scraper_class.__name__} resulted in an exception:".format(**locals()))
-    except Exception as e:
-        log.exception("Running scraper {scraper_class.__name__} resulted in an exception:".format(**locals()))
+        finally:
+           if isinstance(scraper, SeleniumMixin):
+                try:
+                    os.makedirs("artifacts", exist_ok=True)
+                    html = scraper.browser.execute_script("return document.body.outerHTML;")
+                    open("artifacts/last_sight.html","w").write(html)
+                    scraper.browser.save_screenshot("artifacts/last_sight.png")
+                except:
+                    log.exception("Taking screenshot of {scraper_class.__name__} resulted in an exception:".format(**locals()))
 
     return [], True
 
@@ -203,13 +222,17 @@ def run(config, args, scrapers):
         if exception.errno != errno.EEXIST:
             raise
 
+    failed_found = False
     for label, (timestamp, narticles, failed, log) in logs.items():
+        failed_found = failed or failed_found
         json.dump({
             "narticles": narticles, "log": log, "label": label,
             "timestamp": int(timestamp.strftime("%s")),
             "update": args["--update"], "uuid": identifier,
             "failed": failed
         }, open(log_file, "w"))
+
+    return not failed_found
 
 
 def _bool_to_str(val):
@@ -330,7 +353,10 @@ def main(config, args):
         return list_scrapers(config)
 
     if args["run"]:
-        return run(config, args, args["<scraper>"])
+        if run(config, args, args["<scraper>"]):
+            sys.exit(0)
+        else:
+            sys.exit(1)
 
     if args["report"]:
         return report(config, args)

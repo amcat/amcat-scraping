@@ -23,13 +23,14 @@ import logging
 import re
 import time
 
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin, urlparse, unquote
 
 import dateutil
 import feedparser
 import iso8601
 import lxml
 import lxml.html
+from selenium.common.exceptions import NoSuchElementException
 
 from amcat.models import Article
 from amcatscraping.scraper import DeduplicatingUnitScraper, SeleniumMixin, SeleniumLoginMixin
@@ -53,6 +54,7 @@ def dutch_strptime(date, pattern):
          locale.setlocale(locale.LC_ALL, loc)
    
 class GenericScraper(SeleniumMixin, DeduplicatingUnitScraper):
+    cookie_button = None
     index_url = None
     article_url_re = None
     article_url_cssselector = "a"
@@ -89,16 +91,27 @@ class GenericScraper(SeleniumMixin, DeduplicatingUnitScraper):
         for name, value in self.default_cookies.items():
             self.browser.add_cookie({'name': name, 'value': value})
 
-    def get_raw_html(self, url, wait_for="html"):
-        self.browser.get(url)
-        self.wait(wait_for)
+        if self.cookie_button:
+            self.wait(self.cookie_button).click()
+
+        if self.has_ccm_cookies:
+            self.wait(".ccm_col_content_cookieitem-radiowrap label")
+            for label in self.browser.find_elements_by_css_selector(".ccm_col_content_cookieitem-radiowrap > label:first-child"):
+                label.click()
+                time.sleep(0.3)
+            time.sleep(0.3)
+            self.wait("button.ccm_btn").click()
+            time.sleep(0.3)
+
+    def get_raw_html(self, wait_for="html", timeout=60):
+        self.wait(wait_for, timeout=timeout)
         return self.wait("html").get_attribute("outerHTML")
 
     def get_date(self, doc):
         raise NotImplementedError("get_timestamp() not implemented")
 
-    def get_html(self, url, wait_for="html"):
-        return lxml.html.fromstring(self.get_raw_html(url, wait_for=wait_for), base_url=url)
+    def get_html(self, wait_for="html", timeout=60):
+        return lxml.html.fromstring(self.get_raw_html(wait_for=wait_for, timeout=timeout), base_url=self.browser.current_url)
 
     def get_deduplicate_key_from_unit(self, unit) -> str:
         return unit
@@ -106,8 +119,13 @@ class GenericScraper(SeleniumMixin, DeduplicatingUnitScraper):
     def get_deduplicate_key_from_article(self, article: Article) -> str:
         return article.url
 
+    def get_url_from_unit(self, unit: str):
+        return unit
+
     def get_deduplicate_units(self):
-        index = self.get_html(self.index_url)
+        self.browser.get(self.index_url)
+
+        index = self.get_html()
 
         units = index.cssselect(self.article_url_cssselector)
         n_units = len(units)
@@ -122,25 +140,10 @@ class GenericScraper(SeleniumMixin, DeduplicatingUnitScraper):
                 seen.add(absolute_url)
 
     def scrape_unit(self, url):
-        reader_url = "about:reader?url={}".format(url)
-        doc = self.get_html(reader_url, wait_for="div.content p")
-
-        for tag in REMOVE_TAGS:
-            for element in doc.cssselect(tag):
-                element.getparent().remove(element)
-
-        article = doc.cssselect("div.content")[0]
-        article_html = lxml.html.tostring(article).decode()
-
-        title = doc.cssselect("h1.reader-title")[0].text_content().strip()
-        text = html2text(article_html)
+        self.browser.get(url)
 
         if self.__class__.get_date is not GenericScraper.get_date:
-            # Get contents of un-firefox-read-ed article
-            self.wait(".reader-toolbar .close-button").click()
-            time.sleep(0.3)
-            doc_html = self.wait("html").get_attribute("outerHTML")
-            doc = lxml.html.fromstring(doc_html, base_url=url)
+            doc = self.get_html()
 
             try:
                 date = self.get_date(doc)
@@ -152,42 +155,65 @@ class GenericScraper(SeleniumMixin, DeduplicatingUnitScraper):
         else:
             date = self.now
 
+        self.browser.execute_script("javascript:(function(){readConvertLinksToFootnotes=false;readStyle='style-newspaper';readSize='size-medium';readMargin='margin-wide';_readability_script=document.createElement('script');_readability_script.type='text/javascript';_readability_script.src='https://hmbastiaan.nl/martijn/downloads/readability.js?x='+(Math.random());document.documentElement.appendChild(_readability_script);_readability_css=document.createElement('link');_readability_css.rel='stylesheet';_readability_css.href='https://hmbastiaan.nl/martijn/downloads/readability.css?1';_readability_css.type='text/css';_readability_css.media='all';document.documentElement.appendChild(_readability_css);_readability_print_css=document.createElement('link');_readability_print_css.rel='stylesheet';_readability_print_css.href='https://hmbastiaan.nl/martijn/downloads/readability-print.css';_readability_print_css.media='print';_readability_print_css.type='text/css';document.getElementsByTagName('head')[0].appendChild(_readability_print_css);})();")
+
+        try:
+            doc = self.get_html(wait_for="#readability-page-1", timeout=20)
+        except NoSuchElementException:
+            # Readability couldn't parse this document
+            return Article(date=date, title=self.browser.title, url=url, text="GENERICPARSEERROR: COULD NOT PARSE DOCUMENT")
+
+        for tag in REMOVE_TAGS:
+            for element in doc.cssselect(tag):
+                element.getparent().remove(element)
+
+        try:
+            article = doc.cssselect("#readability-content")[0]
+        except NoSuchElementException:
+            log.exception("Failed to readability: {}".format(url))
+            return None
+
+        article_html = lxml.html.tostring(article).decode()
+
+        title = doc.cssselect("#readInner > h1")[0].text_content().strip()
+        text = html2text(article_html)
+
         article = Article(date=date, title=title, text=text, url=url)
 
         return article
 
 class GenericRSSScraper(GenericScraper):
     article_url_re = ".+"
+    rss_url = None
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.url_date_cache = {}
 
     def get_deduplicate_units(self):
-        feed = feedparser.parse(self.index_url)
+        feed = feedparser.parse(self.rss_url)
 
         for entry in feed['entries']:
             url = entry["links"][0]["href"]
             date = dateutil.parser.parse(entry['published'])
-            self.url_date_cache[url] = date
+            self.url_date_cache[urlparse(url)[1:3]] = date
             yield url
 
     def get_date(self, doc):
-        return self.url_date_cache[doc.base_url]
-
+        return self.url_date_cache[urlparse(unquote(doc.base_url))[1:3]]
 
 
 class Nu(GenericScraper):
     index_url = "https://www.nu.nl"
     article_url_re = "/[\w-]+/[0-9]+/.+.html"
-
-    def setup_session(self):
-        super(Nu, self).setup_session()
-        self.wait("#sanoma-consent-accept-button").click()
+    cookie_button = "#sanoma-consent-accept-button"
 
     def get_date(self, doc):
         date = doc.cssselect(".pubdate.large")[0].text_content().strip()
-        date = datetime.datetime.strptime(date, '%d-%m-%y %H:%M')
+        try:
+            date = datetime.datetime.strptime(date, '%d-%m-%y %H:%M')
+        except:
+            date = dutch_strptime(date, "%d %B %Y %H:%M")
         return date
  
 class AD(SeleniumLoginMixin, GenericScraper):
@@ -211,6 +237,7 @@ class Volkskrant(SeleniumLoginMixin, GenericScraper):
     login_password_field = "#password"
     login_error_selector = ".form__error"
 
+    cookie_button = ".modal .button--accept"
     index_url = "https://www.volkskrant.nl/"
     article_url_re = "/[\w-]+/[\w-]+~[a-z0-9]+/"
 
@@ -229,18 +256,20 @@ class Trouw(SeleniumLoginMixin, GenericScraper):
     login_password_field = "#loginform_password"
     login_error_selector = ".form__error-description.fjs-login-error"
 
+    cookie_button = ".btn.btn--accept"
     index_url = "https://www.trouw.nl/"
     article_url_re = "/[\w-]+/[\w-]+~[a-z0-9]+/"
 
     def get_date(self, doc):
         date = self.browser.execute_script('return window.APP.article["publicationDateAndTime"]')
-        return dutch_strptime(date, "%H:%M, %-d %B %Y")
+        return dutch_strptime(date, "%H:%M, %d %B %Y")
 
 class FD(SeleniumLoginMixin, GenericScraper):
     login_url = "https://fd.nl/login"
     login_username_field = 'input[name="username"]'
     login_password_field = 'input[name="password"]'
     login_error_selector = "form .errors li"
+    cookie_button = "#cookieconsent1"
 
     index_url = "https://fd.nl/laatste-nieuws"
     article_url_cssselector = "article > a"
@@ -293,13 +322,16 @@ class Telegraaf(SeleniumLoginMixin, GenericScraper):
 class NOS(GenericScraper):
     index_url = "https://www.nos.nl/"
     article_url_re = "/artikel/"
+    has_ccm_cookies = True
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def get_deduplicate_units(self):
+        sections = self.options.get("sections", "").strip()
+        if not sections:
+            return super(NOS, self).get_deduplicate_units()
 
-        section = self.options.get("section")
-        if section:
-            self.index_url += "nieuws/{}/".format(section)
+        for section in map(str.strip, sections.split(",")):
+            self.index_url = "https://www.nos.nl/nieuws/{}/".format(section)
+            yield from super(NOS, self).get_deduplicate_units()
 
     def get_date(self, doc):
         date = doc.cssselect("article .meta time")[0].get("datetime")
@@ -307,19 +339,19 @@ class NOS(GenericScraper):
 
 class RTLNieuws(GenericScraper):
     index_url = "https://www.rtlnieuws.nl/"
-    article_url_cssselector = "#net-binnen > .tabs-item > a"
-    article_url_re = ".+"
+    article_url_re = "/artikel/"
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def get_deduplicate_units(self):
+        sections = self.options.get("sections", "").strip()
+        if not sections:
+            return super().get_deduplicate_units()
 
-        section = self.options.get("section")
-        if section:
-            self.index_url += section
-            self.article_url_re = re.compile("/{}/[\w-]+".format(section))
+        for section in map(str.strip, sections.split(",")):
+            self.index_url = "https://www.rtlnieuws.nl/{}".format(section)
+            yield from super().get_deduplicate_units()
 
     def get_date(self, doc):
-        date = doc.cssselect("article .timer")[0].text_content().strip()
+        date = doc.cssselect("article .time-created")[0].text_content().strip()
         return dutch_strptime(date, "%d %B %Y %H:%M")
 
     def setup_session(self):
@@ -330,6 +362,7 @@ class RTLNieuws(GenericScraper):
 class EenVandaag(GenericScraper):
     index_url = "https://eenvandaag.avrotros.nl/"
     article_url_re = "/item/"
+    has_ccm_cookies = True
 
     def get_date(self, doc):
         date = doc.cssselect('meta[itemProp="datePublished"]')[0].get("content")
@@ -347,7 +380,7 @@ class SocialeVraagstukken(GenericScraper):
 
 class Zembla(GenericScraper):
     index_url = "https://zembla.bnnvara.nl/nieuws"
-    article_url_re = "/nieuws/[\w-]+"
+    article_url_re = "/nieuws/[\w-]+$"
     has_ccm_cookies = True
 
     def get_date(self, doc):
@@ -357,6 +390,7 @@ class Zembla(GenericScraper):
 class DeMonitor(GenericScraper):
     index_url = "https://demonitor.kro-ncrv.nl"
     article_url_re = "/artikelen/[\w-]+"
+    has_ccm_cookies = True
 
     def get_date(self, doc):
         date = doc.cssselect(".dm-article-show-header-content div > span")[0].text_content().strip()
@@ -386,17 +420,22 @@ class Radar(GenericScraper):
     article_url_re = "/nieuws/item/[\w-]+"
 
     def get_date(self, doc):
-        date = doc.cssselect("article time")[0].get("datetime")
-        return iso8601.iso8601.parse_date(date, default_timezone=None)
+        date = doc.cssselect("article time")[0].text_content().strip()
+        date = datetime.datetime.strptime(date, '%d-%m-%Y')
+        return date
 
 class BinnenlandsBestuur(GenericRSSScraper):
-    index_url = "https://www.binnenlandsbestuur.nl/rss/default.lynkx?category=147960"
+    index_url = "https://www.binnenlandsbestuur.nl/"
+    rss_url = "https://www.binnenlandsbestuur.nl/rss/default.lynkx?category=147960"
 
 class AMWeb(GenericRSSScraper):
-    index_url = "http://www.amweb.nl/rss_feeds/all.rss"
+    rss_url = "http://www.amweb.nl/rss_feeds/all.rss"
+    index_url = "http://www.amweb.nl/"
+    cookie_button = ".general-cta-btn"
 
 class Skipr(GenericRSSScraper):
-    index_url = "https://www.skipr.nl/actueel/rss.xml"
+    index_url = "https://www.skipr.nl/"
+    rss_url = "https://www.skipr.nl/actueel/rss.xml"
 
 class ZorgwelzijnNonPremium(GenericScraper):
     index_url = "https://www.zorgwelzijn.nl/nieuws-zorg-welzijn/"
@@ -413,6 +452,7 @@ class ZorgvisieNonPremium(ZorgwelzijnNonPremium):
 class MedischContact(GenericScraper):
     index_url = "https://www.medischcontact.nl/nieuws/laatste-nieuws.htm"
     article_url_re = "/nieuws/laatste-nieuws/artikel/[\w-]+"
+    cookie_button = "a.cc-popup-compliance-accept.cc-akkord"
 
     def get_date(self, doc):
         date = doc.cssselect('meta[name="pubdate"]')[0].get("content")

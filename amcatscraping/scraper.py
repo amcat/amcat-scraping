@@ -23,6 +23,7 @@ import functools
 
 import redis
 import json
+import sys
 import os
 import time
 import datetime
@@ -32,6 +33,7 @@ import atexit
 
 from typing import Iterable, List, Optional, Any, Union, Tuple, Set
 
+import requests
 from selenium import webdriver
 from selenium.common.exceptions import NoSuchElementException, StaleElementReferenceException
 from selenium.webdriver.common.keys import Keys
@@ -74,7 +76,7 @@ class Scraper(object):
 
     def __init__(self, project_id: int, articleset_id: int, batch_size=100, dry_run=False,
                  api_host=None, api_user=None, api_password=None, scrape_comments=True,
-                 deduplicate_on_url=True, options=None, **kwargs):
+                 deduplicate_on_url=True, use_http_url_db=False, options=None, **kwargs):
         """
 
 
@@ -109,8 +111,8 @@ class Scraper(object):
             self.api = self._api_auth()
 
         self.session = Session()
-        self.setup_session()
         self.deduplicate_on_url = deduplicate_on_url
+        self.use_http_url_db = use_http_url_db
         self.duplicate_count = 0
         self.flush_flag = False
 
@@ -128,6 +130,9 @@ class Scraper(object):
         raise NotImplementedError("scrape() not implemented.")
 
     def _save(self, articles: List[Article]) -> Iterable[Article]:
+        if not articles:
+            return []
+
         json_data = [article_to_json(a) for a in articles]
         json_data = json.dumps(json_data, cls=PropertyMappingJSONEncoder)
         new_articles = self.api.create_articles(self.project_id, self.articleset_id, json_data)
@@ -144,6 +149,10 @@ class Scraper(object):
         :param timeout: initial timeout, increases linearly with each try
         :return: articles with id set
         """
+        if self.deduplicate_on_url:
+            log.info("Deduplicating {alen} articles based on urls in AmCAT DB..".format(alen=len(articles)))
+            articles = list(self.deduplicate(articles))
+
         if self.dry_run:
             log.info("Scraper returned %s articles (not saving due to --dry-run)", len(articles))
             return articles
@@ -176,30 +185,69 @@ class Scraper(object):
         return articles
 
     @functools.lru_cache()
+    def get_latest_urls(self):
+        if self.no_api:
+            return set()
+
+        if self.use_http_url_db:
+            url = "{}/media/urls/latest".format(self.api_host)
+            log.info("Getting latest urls at {}".format(url))
+
+            urls_resp = requests.get(url)
+            if urls_resp.status_code == 404:
+                return set()
+            elif urls_resp.status_code == 200:
+                return set(urls_resp.text.rstrip().split('\n'))
+            else:
+                raise ValueError("HTTP url cache returned code {}".format(urls_resp.status_code))
+        else:
+            return self.get_urls(datetime.date.today())
+
+    @functools.lru_cache()
     def get_urls(self, date: datetime.date) -> Set[str]:
         if self.no_api:
             return set()
 
-        return set(map(itemgetter("url"), self.api.list_articles(
-            project=self.project_id,
-            articleset=self.articleset_id,
-            on_date=date.isoformat(),
-            minimal=1,
-            col=["url"],
-            page_size=9999
-        )))
+        if self.use_http_url_db:
+            # Fetch from HTTP cache
+            url = "{}/media/urls/{}/{}/{}".format(
+                self.api_host,
+                date.year,
+                str(date.month).zfill(2),
+                str(date.day).zfill(2)
+            )
+
+            log.info("Getting urls for {} at {}".format(date, url))
+
+            urls_resp = requests.get(url)
+            if urls_resp.status_code == 404:
+                return set()
+            elif urls_resp.status_code == 200:
+                return set(urls_resp.text.rstrip().split('\n'))
+            else:
+                raise ValueError("HTTP url cache returned code {}".format(urls_resp.status_code))
+
+        else:
+            log.info("Getting urls for {} using traditional API".format(date))
+
+            # Use traditional API:
+            return set(map(itemgetter("url"), self.api.list_articles(
+                project=self.project_id,
+                articleset=self.articleset_id,
+                on_date=date.isoformat(),
+                minimal=1,
+                col=["url"],
+                page_size=9999
+            )))
 
     def deduplicate(self, articles: Iterable[Article]) -> Iterable[Article]:
-        """Given a number of articles, return those not yet present in db based on a set of
-        properties specified in the scraper's constructor."""
-        if self.deduplicate_on_url:
-            for article in articles:
-                if article.url not in self.get_urls(article.date.date()):
-                    yield article
-                else:
-                    self.duplicate_count += 1
-        else:
-            yield from articles
+        """Given a number of articles, return those not yet present in db based
+        on the article's url"""
+        for article in articles:
+            if article.url not in self.get_urls(to_date(article.date)):
+                yield article
+            else:
+                self.duplicate_count += 1
 
     def process_tree(self, article_tree: ArticleTree, parent_hash=None) -> Iterable[Article]:
         article, children = article_tree
@@ -260,11 +308,11 @@ class UnitScraper(Scraper):
         for unit in self.get_units():
             if self.deduplicate_on_url:
                 try:
-                    url, date = self.get_url_and_date_from_unit(unit)
+                    url = self.get_url_from_unit(unit)
                 except NotImplementedError:
                     pass
                 else:
-                    if url in self.get_urls(date):
+                    if url in self.get_latest_urls():
                         # Duplicate detected
                         self.duplicate_count += 1
                         continue
@@ -273,8 +321,8 @@ class UnitScraper(Scraper):
             if article is not None:
                 yield article
 
-    def get_url_and_date_from_unit(self, unit: Any) -> Tuple[str, datetime.date]:
-        raise NotImplementedError("Subclasses should implement get_url_and_date_from_unit()")
+    def get_url_from_unit(self, unit: Any) -> str:
+        raise NotImplementedError("Subclasses should implement get_url_from_unit()")
 
 
 class DeduplicatingUnitScraper(UnitScraper):
@@ -552,18 +600,27 @@ class NotVisible(Exception):
 
 class SeleniumMixin(object):
     def setup_session(self):
-        fp = webdriver.FirefoxProfile()
-        for k, v in self.get_browser_preferences():
-            fp.set_preference(k, v)
-
-        self.browser = webdriver.Firefox(firefox_profile=fp)
+        options = webdriver.ChromeOptions()
+        options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("--window-size=1920,1080")
+        if not "--no-headless" in sys.argv:
+            options.add_argument("--headless")
+        options.add_argument("--no-sandbox")
+        self.browser = webdriver.Chrome(chrome_options=options)
         atexit.register(quit_browser, self.browser)
-
         super(SeleniumMixin, self).setup_session()
 
     def wait(self, selector, timeout=60, visible=True, by=By.CSS_SELECTOR, on=None):
         start = datetime.datetime.now()
         on = on or self.browser
+
+        def check(e):
+            if not visible:
+                return True
+            elif e.is_displayed():
+                return True
+
+            return False
 
         while True:
             seconds_forgone = (datetime.datetime.now() - start).total_seconds()
@@ -575,14 +632,9 @@ class SeleniumMixin(object):
                 if seconds_forgone > timeout:
                     raise
             else:
-                if not visible:
-                    return element
-                elif element.is_displayed():
-                    return element
-                elif elements:
-                    for e in elements:
-                        if e.is_displayed():
-                            return e
+                for e in [element] + elements:
+                    if check(e):
+                        return e
 
                 if seconds_forgone > timeout:
                     raise NotVisible("Element present, but not visible: {}".format(selector))

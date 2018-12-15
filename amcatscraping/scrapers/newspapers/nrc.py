@@ -59,8 +59,8 @@ class NRCScraper(LoginMixin, UnitScraper, DateRangeScraper):
                 for a in doc.cssselect("ul.article-links li > a"):
                     yield ArticleTuple(parse.urljoin(a.base_url, a.get('href')), date)
 
-    def get_url_and_date_from_unit(self, unit: ArticleTuple) -> Tuple[str, datetime.date]:
-        return unit
+    def get_url_from_unit(self, unit: ArticleTuple) -> str:
+        return unit.url
 
     def __getsections(self, date):
         monthminus = date.month - 1
@@ -71,6 +71,7 @@ class NRCScraper(LoginMixin, UnitScraper, DateRangeScraper):
             yield self.session.get_html(parse.urljoin(a.base_url, a.get("href")))
 
     def scrape_unit(self, unit):
+        print(unit)
         url = unit.url
         doc = self.session.get_html(url)
         text = "\n\n".join([t.text_content() for t in doc.cssselect("em.intro,div.column-left p")])
