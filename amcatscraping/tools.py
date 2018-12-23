@@ -18,6 +18,7 @@
 ###########################################################################
 from collections import OrderedDict
 
+import functools
 import logging
 import sys
 import datetime
@@ -28,6 +29,43 @@ from lxml import html, etree
 log = logging.getLogger(__name__)
 
 ### MISC ###
+def unique(seq):
+    seen = set()
+    seen_add = seen.add
+    return [x for x in seq if not (x in seen or seen_add(x))]
+
+def listify(fn=None, wrapper=list):
+    """
+    A decorator which wraps a function's return value in ``list(...)``.
+
+    Useful when an algorithm can be expressed more cleanly as a generator but
+    the function should return an list.
+
+    Example::
+
+        >>> @listify
+        ... def get_lengths(iterable):
+        ...     for i in iterable:
+        ...         yield len(i)
+        >>> get_lengths(["spam", "eggs"])
+        [4, 4]
+        >>>
+        >>> @listify(wrapper=tuple)
+        ... def get_lengths_tuple(iterable):
+        ...     for i in iterable:
+        ...         yield len(i)
+        >>> get_lengths_tuple(["foo", "bar"])
+        (3, 3)
+    """
+    def listify_return(fn):
+        @functools.wraps(fn)
+        def listify_helper(*args, **kw):
+            return wrapper(fn(*args, **kw))
+        return listify_helper
+    if fn is None:
+        return listify_return
+    return listify_return(fn)
+
 _boolean_states = {
     '1': True, 'yes': True, 'true': True, 'on': True,
     '0': False, 'no': False, 'false': False, 'off': False

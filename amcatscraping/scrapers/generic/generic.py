@@ -21,20 +21,20 @@ import http.cookies
 import locale
 import logging
 import re
-import time
-
-from urllib.parse import urljoin, urlparse, unquote
-
 import dateutil
 import feedparser
 import iso8601
 import lxml
 import lxml.html
+import time
+
 from selenium.common.exceptions import NoSuchElementException
+from urllib.parse import urljoin, urlparse, unquote
 
 from amcat.models import Article
-from amcatscraping.scraper import DeduplicatingUnitScraper, SeleniumMixin, SeleniumLoginMixin
-from amcatscraping.tools import html2text
+from amcatscraping.scraper import SeleniumMixin, \
+    SeleniumLoginMixin, UnitScraper, Units
+from amcatscraping.tools import html2text, listify
 
 log = logging.getLogger(__name__)
 
@@ -53,7 +53,7 @@ def dutch_strptime(date, pattern):
      finally:
          locale.setlocale(locale.LC_ALL, loc)
    
-class GenericScraper(SeleniumMixin, DeduplicatingUnitScraper):
+class GenericScraper(SeleniumMixin, UnitScraper):
     cookie_button = None
     index_url = None
     article_url_re = None
@@ -113,31 +113,24 @@ class GenericScraper(SeleniumMixin, DeduplicatingUnitScraper):
     def get_html(self, wait_for="html", timeout=60):
         return lxml.html.fromstring(self.get_raw_html(wait_for=wait_for, timeout=timeout), base_url=self.browser.current_url)
 
-    def get_deduplicate_key_from_unit(self, unit) -> str:
-        return unit
-
-    def get_deduplicate_key_from_article(self, article: Article) -> str:
-        return article.url
-
     def get_url_from_unit(self, unit: str):
         return unit
 
-    def get_deduplicate_units(self):
+    @listify(wrapper=Units)
+    def get_units(self):
         self.browser.get(self.index_url)
 
         index = self.get_html()
 
         units = index.cssselect(self.article_url_cssselector)
-        n_units = len(units)
 
         seen = set()
-        for i, a in enumerate(units):
+        for a in units:
             absolute_url = urljoin(self.index_url, a.get("href"))
             if self.article_url_re.search(absolute_url):
                 if absolute_url not in seen:
-                    print("{}/{}: {}".format(i, n_units, absolute_url))
                     yield absolute_url
-                seen.add(absolute_url)
+                    seen.add(absolute_url)
 
     def scrape_unit(self, url):
         self.browser.get(url)
@@ -190,7 +183,8 @@ class GenericRSSScraper(GenericScraper):
         super().__init__(*args, **kwargs)
         self.url_date_cache = {}
 
-    def get_deduplicate_units(self):
+    @listify(wrapper=Units)
+    def get_units(self):
         feed = feedparser.parse(self.rss_url)
 
         for entry in feed['entries']:
@@ -324,14 +318,15 @@ class NOS(GenericScraper):
     article_url_re = "/artikel/"
     has_ccm_cookies = True
 
-    def get_deduplicate_units(self):
+    @listify(wrapper=Units)
+    def get_units(self):
         sections = self.options.get("sections", "").strip()
         if not sections:
-            return super(NOS, self).get_deduplicate_units()
+            return super(NOS, self).get_units()
 
         for section in map(str.strip, sections.split(",")):
             self.index_url = "https://www.nos.nl/nieuws/{}/".format(section)
-            yield from super(NOS, self).get_deduplicate_units()
+            yield from super(NOS, self).get_units()
 
     def get_date(self, doc):
         date = doc.cssselect("article .meta time")[0].get("datetime")
@@ -341,14 +336,15 @@ class RTLNieuws(GenericScraper):
     index_url = "https://www.rtlnieuws.nl/"
     article_url_re = "/artikel/"
 
-    def get_deduplicate_units(self):
+    @listify(wrapper=Units)
+    def get_units(self):
         sections = self.options.get("sections", "").strip()
         if not sections:
-            return super().get_deduplicate_units()
+            return super().get_units()
 
         for section in map(str.strip, sections.split(",")):
             self.index_url = "https://www.rtlnieuws.nl/{}".format(section)
-            yield from super().get_deduplicate_units()
+            yield from super().get_units()
 
     def get_date(self, doc):
         date = doc.cssselect("article .time-created")[0].text_content().strip()

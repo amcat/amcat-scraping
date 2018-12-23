@@ -22,16 +22,15 @@ import datetime
 import locale
 
 from urllib.parse import urljoin
-
 from collections import namedtuple
-from typing import Tuple
 
 from selenium.common.exceptions import ElementClickInterceptedException, \
     NoSuchElementException, WebDriverException
 
 from amcat.models import Article
-from amcatscraping.scraper import SeleniumLoginMixin, SeleniumMixin, DeduplicatingUnitScraper, DateRangeScraper
-from amcatscraping.tools import html2text
+from amcatscraping.scraper import SeleniumLoginMixin, SeleniumMixin, \
+    DateRangeScraper, Units, UnitScraper
+from amcatscraping.tools import html2text, listify
 
 EPagesUnit = namedtuple("EPagesUnit", ["url", "date", "title", "page", "screenshot", "text"])
 
@@ -44,7 +43,7 @@ def dutch_strptime(date, pattern):
     finally:
         locale.setlocale(locale.LC_ALL, loc)
 
-class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, DeduplicatingUnitScraper):
+class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, UnitScraper):
     cookies_ok_button = None
     editions = None
     login_url = None
@@ -98,13 +97,7 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedupli
     def get_url_from_unit(self, unit: EPagesUnit) -> str:
         return unit.url
 
-    def get_deduplicate_key_from_article(self, article: Article) -> str:
-        return article.url
-
-    def get_deduplicate_key_from_unit(self, unit: EPagesUnit) -> str:
-        return unit.url
-
-    def _get_deduplicate_units(self, date, edition=None):
+    def _get_units(self, date, edition=None):
         # Select edition
         self.browser.get(self.login_url)
 
@@ -155,8 +148,6 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedupli
                 refid = article.get_attribute("data-refid")
                 url = urljoin(self.browser.current_url + "/", refid)
 
-                print(url)
-
                 def collect_headers(els):
                     for el in els:
                         el_text = el.get_property("textContent").strip()
@@ -202,13 +193,14 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedupli
 
                 yield EPagesUnit(url, date, title, page, screenshot, text)
 
-    def get_deduplicate_units(self):
+    @listify(wrapper=Units)
+    def get_units(self):
         for date in self.dates:
             if self.editions is not None:
                 for edition in self.editions:
-                    yield from self._get_deduplicate_units(date, edition)
+                    yield from self._get_units(date, edition)
             else:
-                yield from self._get_deduplicate_units(date)
+                yield from self._get_units(date)
 
     def scrape_unit(self, unit: EPagesUnit):
         return Article(

@@ -19,16 +19,20 @@
 import atexit
 import datetime
 import json
+import logging
 import sys
 import time
 
 from typing import Iterable, List, Optional, Any, Union
 
-import requests
+from amcatclient.amcatclient import AmcatAPI, APIError
 from selenium import webdriver
-from selenium.common.exceptions import NoSuchElementException, StaleElementReferenceException
+from selenium.common.exceptions import NoSuchElementException, \
+    StaleElementReferenceException
+from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 
+from amcat.models import Article
 from amcat.models import PropertyMappingJSONEncoder
 from .httpsession import Session
 from .tools import to_date
@@ -56,6 +60,33 @@ class ArticleTree:
 
     def __iter__(self):
         return iter((self.article, self.children))
+
+
+class ScraperAmcatAPI(AmcatAPI):
+    def filter_existing_urls(self, project_id, set_ids, urls: List[str]):
+        if not urls:
+            return ()
+
+        for url in urls:
+            if "*" in url or "?" in url:
+                raise ValueError("AmCAT does not allow looking for urls that contian * or ?")
+
+        log.info("Checking if {} urls exist in AmCAT DB..".format(len(urls)))
+
+        qs = ('url:"{}"'.format(url) for url in urls)
+        q = "l1#" + "(" + ") OR (".join(qs) + ")"
+
+        search = {
+            'q': q,
+            'project': project_id,
+            'sets': set_ids,
+            'col': ['id', 'url'],
+            'page_size': len(urls),
+        }
+
+        response = self.request("search", **search)
+        existing_urls = {row["url"] for row in response["results"]}
+        return (url for url in urls if url not in existing_urls)
 
 
 class Scraper(object):
@@ -103,11 +134,20 @@ class Scraper(object):
         self.duplicate_count = 0
         self.flush_flag = False
 
-    def _api_auth(self) -> AmcatAPI:
-        return AmcatAPI(self.api_host, self.api_user, self.api_password)
+    def _api_auth(self) -> ScraperAmcatAPI:
+        return ScraperAmcatAPI(self.api_host, self.api_user, self.api_password)
 
     def setup_session(self):
         pass
+
+    def filter_existing_urls(self, urls: List[str]):
+        if self.api is None:
+            return urls
+
+        if not urls:
+            return []
+
+        return self.api.filter_existing_urls(self.project_id, [self.articleset_id], urls)
 
     def set_flush_flag(self):
         self.flush_flag = True
@@ -144,6 +184,10 @@ class Scraper(object):
             log.info("Scraper returned %s articles (not saving due to --dry-run)", len(articles))
             return articles
 
+        if not articles:
+            log.info("Articles already in AmCAT DB")
+            return []
+
         log.info("Saving {alen} articles..".format(alen=len(articles)))
 
         # AmCAT API is really unstable :-(.
@@ -171,67 +215,13 @@ class Scraper(object):
         """Space to do something with the unsaved articles that the scraper provided"""
         return articles
 
-    @functools.lru_cache()
-    def get_latest_urls(self):
-        if self.no_api:
-            return set()
-
-        if self.use_http_url_db:
-            url = "{}/media/urls/latest".format(self.api_host)
-            log.info("Getting latest urls at {}".format(url))
-
-            urls_resp = requests.get(url)
-            if urls_resp.status_code == 404:
-                return set()
-            elif urls_resp.status_code == 200:
-                return set(urls_resp.text.rstrip().split('\n'))
-            else:
-                raise ValueError("HTTP url cache returned code {}".format(urls_resp.status_code))
-        else:
-            return self.get_urls(datetime.date.today())
-
-    @functools.lru_cache()
-    def get_urls(self, date: datetime.date) -> Set[str]:
-        if self.no_api:
-            return set()
-
-        if self.use_http_url_db:
-            # Fetch from HTTP cache
-            url = "{}/media/urls/{}/{}/{}".format(
-                self.api_host,
-                date.year,
-                str(date.month).zfill(2),
-                str(date.day).zfill(2)
-            )
-
-            log.info("Getting urls for {} at {}".format(date, url))
-
-            urls_resp = requests.get(url)
-            if urls_resp.status_code == 404:
-                return set()
-            elif urls_resp.status_code == 200:
-                return set(urls_resp.text.rstrip().split('\n'))
-            else:
-                raise ValueError("HTTP url cache returned code {}".format(urls_resp.status_code))
-
-        else:
-            log.info("Getting urls for {} using traditional API".format(date))
-
-            # Use traditional API:
-            return set(map(itemgetter("url"), self.api.list_articles(
-                project=self.project_id,
-                articleset=self.articleset_id,
-                on_date=date.isoformat(),
-                minimal=1,
-                col=["url"],
-                page_size=9999
-            )))
-
-    def deduplicate(self, articles: Iterable[Article]) -> Iterable[Article]:
+    def deduplicate(self, articles: List[Article]) -> Iterable[Article]:
         """Given a number of articles, return those not yet present in db based
         on the article's url"""
+        filtered_urls = self.filter_existing_urls([article.url for article in articles])
+
         for article in articles:
-            if article.url not in self.get_urls(to_date(article.date)):
+            if article.url in filtered_urls:
                 yield article
             else:
                 self.duplicate_count += 1
@@ -276,6 +266,15 @@ class Scraper(object):
         return articles
 
 
+class Units:
+    """Used when scraper wants to yield a list of units at a time."""
+    def __init__(self, units):
+        self.units = list(units)
+
+    def __iter__(self):
+        return iter(self.units)
+
+
 class UnitScraper(Scraper):
     """Scrapes the resource on a per-unit basis. Descendants should override
     the methods get_units() and scrape_unit(). Basically, what it does is:
@@ -285,28 +284,41 @@ class UnitScraper(Scraper):
             yield self.scrape_unit(unit)
 
     """
+    def filter_existing_urls_by(self, units, get_url):
+        units = {get_url(unit): unit for unit in units}
+        for non_existing_url in self.filter_existing_urls(list(units.keys())):
+            yield units[non_existing_url]
+
     def get_units(self) -> Iterable[Any]:
-        return []
+        raise NotImplementedError("Subclasses should implement get_units()")
 
     def scrape_unit(self, unit) -> Optional[Article]:
-        return None
+        raise NotImplementedError("Subclasses should implement get_unit()")
 
     def scrape(self) -> Iterable[Union[Article, ArticleTree]]:
-        for unit in self.get_units():
-            if self.deduplicate_on_url:
-                try:
-                    url = self.get_url_from_unit(unit)
-                except NotImplementedError:
-                    pass
-                else:
-                    if url in self.get_latest_urls():
-                        # Duplicate detected
-                        self.duplicate_count += 1
-                        continue
+        units_or_iterable = self.get_units()
+        if isinstance(units_or_iterable, Units):
+            uiterable = [units_or_iterable]
+        else:
+            uiterable = units_or_iterable
 
-            article = self.scrape_unit(unit)
-            if article is not None:
-                yield article
+        for unit_or_units in uiterable:
+            if isinstance(unit_or_units, Units):
+                units = unit_or_units.units
+            else:
+                units = [unit_or_units]
+
+            n_units_before = len(units)
+            units = list(self.filter_existing_urls_by(units, self.get_url_from_unit))
+            n_units_after = len(units)
+
+            self.duplicate_count += n_units_before - n_units_after
+
+            for unit in units:
+                log.info("Scraping {}..".format(self.get_url_from_unit(unit)))
+                article = self.scrape_unit(unit)
+                if article is not None:
+                    yield article
 
     def get_url_from_unit(self, unit: Any) -> str:
         raise NotImplementedError("Subclasses should implement get_url_from_unit()")

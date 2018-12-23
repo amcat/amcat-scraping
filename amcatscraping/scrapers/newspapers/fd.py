@@ -30,8 +30,9 @@ from typing import Tuple
 from urllib import parse
 
 from amcat.models import Article
-from amcatscraping.tools import parse_form, html2text
-from amcatscraping.scraper import LoginMixin, UnitScraper, DateRangeScraper
+from amcatscraping.tools import parse_form, html2text, listify
+from amcatscraping.scraper import LoginMixin, UnitScraper, DateRangeScraper, \
+    Units
 from amcatscraping.httpsession import RedirectError
 
 log = logging.getLogger(__name__)
@@ -112,6 +113,7 @@ class FinancieelDagbladScraper(LoginMixin, UnitScraper, DateRangeScraper):
                     url = parse.urljoin(BASE_URL, a.get('href'))
                     yield ArticleTuple(date, int(match.group("page_num")), url)
 
+    @listify(wrapper=Units)
     def get_units(self):
         pages = map(self._get_pages, self.dates)
         pages = map(set, pages)
@@ -122,7 +124,6 @@ class FinancieelDagbladScraper(LoginMixin, UnitScraper, DateRangeScraper):
         return unit.url
 
     def scrape_unit(self, article_info: ArticleTuple):
-        print(article_info)
         date, page_num, url = article_info
 
         try:

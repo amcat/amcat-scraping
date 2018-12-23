@@ -29,7 +29,8 @@ from selenium.common.exceptions import ElementClickInterceptedException, NoSuchE
 from selenium.webdriver.common.keys import Keys
 
 from amcat.models import Article
-from amcatscraping.scraper import SeleniumLoginMixin, SeleniumMixin, DeduplicatingUnitScraper, DateRangeScraper, NotVisible
+from amcatscraping.scraper import SeleniumLoginMixin, SeleniumMixin, \
+    DateRangeScraper, NotVisible, Units, UnitScraper
 from amcatscraping.tools import html2text
 
 TelegraafUnit = namedtuple("TelegraafUnit", ["article_element", "url", "date", "page_range"])
@@ -43,7 +44,7 @@ def dutch_strptime(date, pattern):
     finally:
         locale.setlocale(locale.LC_ALL, loc)
 
-class TelegraafScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, DeduplicatingUnitScraper):
+class TelegraafScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, UnitScraper):
     publisher = "De Telegraaf"
     cookies_ok_button = "form .CookiesOK"
     editions = None
@@ -88,23 +89,16 @@ class TelegraafScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedu
     def get_url_from_unit(self, unit: TelegraafUnit) -> str:
         return unit.url
 
-    def get_deduplicate_key_from_article(self, article: Article) -> str:
-        return article.url
-
-    def get_deduplicate_key_from_unit(self, unit: TelegraafUnit) -> str:
-        return unit.url
-
     def next_button(self):
         return self.wait("#next-page-button", visible=False)
 
-    def _get_deduplicate_units(self, date, edition=None):
+    def _get_units(self, date, edition=None):
         self.browser.get("https://digitalpublishing.telegraaf.nl/static/krant/")
 
         found = False
         for day_container in self.browser.find_elements_by_css_selector(".Day__date-container"):
             paper_date_string = " ".join(day_container.text.split()[1:3] + ["2018"])
             paper_date = dutch_strptime(paper_date_string, "%d %B %Y").date()
-            print(paper_date_string, paper_date, date, paper_date==date)
             if date == paper_date:
                 self.wait(".Day__button", on=day_container).click()
                 found = True
@@ -113,6 +107,7 @@ class TelegraafScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedu
         if found:
             self.wait("#next-page-button")
             while self.next_button().is_displayed():
+                units = []
                 for article in self.browser.find_elements_by_css_selector(".pages-swiper-slide-active .article-layer"):
                     id = article.get_property("id")
                     url = self.browser.current_url
@@ -120,19 +115,25 @@ class TelegraafScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedu
                     page_range = fragment.split("/")[-1]
                     query += "&hash=" + hashlib.sha256(str((id, date, page_range)).encode()).hexdigest()[:20]
                     url = parse.urlunparse((scheme, netloc, path, params, query, fragment))
-                    print(url)
-                    yield TelegraafUnit(article, url, date, page_range)
+
+                    # HACK: we cannot use ? or * in url due to query DSL
+                    # limitations.. unfortunately, Telegraaf uses them
+                    url = url.replace("?", "_")
+
+                    units.append(TelegraafUnit(article, url, date, page_range))
+
+                yield Units(units)
 
                 self.next_button().click()
                 time.sleep(5)
 
-    def get_deduplicate_units(self):
+    def get_units(self):
         for date in self.dates:
             if self.editions is not None:
                 for edition in self.editions:
-                    yield from self._get_deduplicate_units(date, edition)
+                    yield from self._get_units(date, edition)
             else:
-                yield from self._get_deduplicate_units(date)
+                yield from self._get_units(date)
 
     def scrape_unit(self, unit: TelegraafUnit):
         article, url, date, page_range = unit

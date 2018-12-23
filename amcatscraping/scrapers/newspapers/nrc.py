@@ -18,7 +18,6 @@
 ###########################################################################
 
 import datetime
-from typing import Tuple
 from urllib import parse
 
 import collections
@@ -26,9 +25,9 @@ import lxml.html
 import re
 
 from amcat.models import Article
-from amcatscraping.tools import setup_logging, parse_form
-from amcatscraping.scraper import LoginMixin, UnitScraper, DateRangeScraper
-
+from amcatscraping.tools import setup_logging, parse_form, listify
+from amcatscraping.scraper import LoginMixin, UnitScraper, DateRangeScraper, \
+    Units
 
 OVERVIEW_URL = "https://login.nrc.nl/overview"
 
@@ -53,6 +52,7 @@ class NRCScraper(LoginMixin, UnitScraper, DateRangeScraper):
         response = self.session.post(login_url, post)
         return response.url.endswith("/overview")
 
+    @listify(wrapper=Units)
     def get_units(self):
         for date in self.dates:
             for doc in self.__getsections(date):
@@ -71,7 +71,6 @@ class NRCScraper(LoginMixin, UnitScraper, DateRangeScraper):
             yield self.session.get_html(parse.urljoin(a.base_url, a.get("href")))
 
     def scrape_unit(self, unit):
-        print(unit)
         url = unit.url
         doc = self.session.get_html(url)
         text = "\n\n".join([t.text_content() for t in doc.cssselect("em.intro,div.column-left p")])
