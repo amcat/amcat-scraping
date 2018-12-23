@@ -1,6 +1,6 @@
 ###########################################################################
-# (C) Vrije Universiteit, Amsterdam (the Netherlands)            #
-# #
+# (C) Vrije Universiteit, Amsterdam (the Netherlands)                     #
+#                                                                         #
 # This file is part of AmCAT - The Amsterdam Content Analysis Toolkit     #
 #                                                                         #
 # AmCAT is free software: you can redistribute it and/or modify it under  #
@@ -16,35 +16,22 @@
 # You should have received a copy of the GNU Lesser General Public        #
 # License along with AmCAT.  If not, see <http://www.gnu.org/licenses/>.  #
 ###########################################################################
-import hashlib
-from operator import itemgetter
-
-import functools
-
-import redis
+import atexit
+import datetime
 import json
 import sys
-import os
 import time
-import datetime
-import logging
-import itertools
-import atexit
 
-from typing import Iterable, List, Optional, Any, Union, Tuple, Set
+from typing import Iterable, List, Optional, Any, Union
 
 import requests
 from selenium import webdriver
 from selenium.common.exceptions import NoSuchElementException, StaleElementReferenceException
 from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.common.by import By
 
 from amcat.models import PropertyMappingJSONEncoder
 from .httpsession import Session
-from .tools import to_date, memoize, open_json_cache
-from amcatclient.amcatclient import AmcatAPI, APIError
-from amcat.models import Article
-
+from .tools import to_date
 
 log = logging.getLogger(__name__)
 
@@ -325,55 +312,6 @@ class UnitScraper(Scraper):
         raise NotImplementedError("Subclasses should implement get_url_from_unit()")
 
 
-class DeduplicatingUnitScraper(UnitScraper):
-    """
-    Deduplicate article based on arbitrary properties on a unit. This will not query the AmCAT
-    database to find duplicates, but uses a local cache (Redis) instead.
-    """
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.cache = redis.from_url("redis://127.0.0.1:6379/1")
-
-    @functools.lru_cache()
-    def _get_redis_key(self):
-        return "amcatscraping_{self.__class__.__name__}_{self.project_id}_{self.articleset_id}".format(self=self)
-
-    def _hash_key(self, key: str) -> bytes:
-        bytes_key = key.encode("utf-8")
-        if len(bytes_key) > 16:
-            return hashlib.sha256(bytes_key).digest()[:16]
-        return bytes_key
-
-    def _get_deduplicate_key_from_unit(self, unit: any) -> bytes:
-        return self._hash_key(self.get_deduplicate_key_from_unit(unit))
-
-    def _get_deduplicate_key_from_article(self, article: Article) -> bytes:
-        return self._hash_key(self.get_deduplicate_key_from_article(article))
-
-    def get_deduplicate_key_from_unit(self, unit: Any) -> str:
-        raise NotImplementedError()
-
-    def get_deduplicate_key_from_article(self, article: Article) -> str:
-        raise NotImplementedError()
-
-    def get_deduplicate_units(self):
-        raise NotImplementedError()
-
-    def get_units(self):
-        for unit in self.get_deduplicate_units():
-            key = self._get_deduplicate_key_from_unit(unit)
-            if not self.cache.sismember(self._get_redis_key(), key):
-                yield unit
-            else:
-                self.duplicate_count += 1
-
-    def save(self, *args, **kwargs):
-        for article in super(DeduplicatingUnitScraper, self).save(*args, **kwargs):
-            if not self.dry_run:
-                self.cache.sadd(self._get_redis_key(), self._get_deduplicate_key_from_article(article))
-            yield article
-
-
 class DateRangeScraper(Scraper):
     """
     Omits any articles that haven't been published in a given period.
@@ -408,184 +346,6 @@ class DateRangeScraper(Scraper):
                 raise ValueError(error_msg.format(**locals()))
 
         return articles
-
-CACHE_DIR = os.path.expanduser("~/.cache")
-
-
-class DateNotFoundError(Exception):
-    pass
-
-
-class BinarySearchScraper(Scraper):
-    """Some websites don't have an archive which is easily orderable on date, but do have
-    ascending thread or article ids. This scraper takes advantage of that fact by performing
-    a binary search through these ids.
-    
-    Descendants should implement the following methods:
-
-      * get_latest()
-      * get_oldest()
-      * get_date(id)
-
-    You should then be able to call get_first_of_date(date).
-    
-    You should also make sure to call _dump_id_cache() after scraping to save the id cache
-    to disk. This scraper caches its id results across subsequent runs."""
-    cache_file = os.path.join(CACHE_DIR, "{self.__class__.__name__}_cache.json")
-
-    def __init__(self, *args, **kwargs):
-        super(BinarySearchScraper, self).__init__(*args, **kwargs)
-        cache_file = self.cache_file.format(**locals())
-        self.id_cache = open_json_cache(cache_file, default={})
-
-        dates, ids = zip(*dict(self.id_cache).items()) or [[], []]
-        dates = [d.date() for d in map(datetime.datetime.fromtimestamp, dates)]
-        self.id_cache = dict(zip(dates, ids))
-        
-        oldest_date, self.oldest_id = self.get_oldest()
-        latest_date, self.latest_id = self.get_latest()
-        self.id_cache[oldest_date] = self.oldest_id
-        self.id_cache[latest_date] = self.latest_id
-        self.valid_ids = self.get_valid_ids()
-        self.valid_ids_pos = {id: pos for pos, id in enumerate(self.valid_ids)}
-
-    def _dump_id_cache(self):
-        dates, ids = zip(*self.id_cache.items()) or [[], []]
-        dates = map(lambda d: int(time.mktime(d.timetuple())), dates)
-        json.dump(zip(dates, ids), open(self.cache_file.format(**locals()), "w"))
-
-    def get_valid_ids(self):
-        """Returns ordered list of valid ids"""
-        return list(range(self.oldest_id, self.latest_id + 1))
-
-    def get_latest(self):
-        """@returns (datetime.date, id)"""
-        raise NotImplementedError("get_latest() not implemented.")
-
-    def get_oldest(self):
-        """@returns (datetime.date, id)"""
-        raise NotImplementedError("get_oldest() not implemented.")
-
-    @memoize
-    def get_date(self, id):
-        """Get date for given id. Must return None if given id does not exist,
-        was deleted or otherwise invalid."""
-        raise NotImplementedError("get_date() not implemented.")
-
-    @memoize
-    def _get_date(self, id):
-        """
-        """
-        oldest_date, oldest_id = self.get_oldest()
-        latest_date, latest_id = self.get_latest()
-
-        if id > latest_id:
-            raise DateNotFoundError("{id} exceeds latest id".format(id=id))
-
-        if id < oldest_id:
-            raise DateNotFoundError("{id} smaller than oldest id".format(id=id))
-
-        date = self.get_date(id)
-        if date is None:
-            return self._get_date(id - 1)
-
-        self.id_cache[date] = id
-        return date
-
-    def _get_first_id_linear(self, date):
-        prev_id = id = self.id_cache[date]
-        while date == self._get_date(id):
-            prev_id = id
-            id = self.valid_ids[self.valid_ids_pos[prev_id] - 1]
-        return prev_id
-
-    def _get_first_id(self, date, left_date, right_date):
-        log.info("Looking for {date}. Left: {left_date}, right: {right_date}".format(**locals()))
-
-        if date == left_date:
-            return self._get_first_id_linear(left_date)
-
-        if date == right_date:
-            return self._get_first_id_linear(right_date)
-
-        right_id = self.id_cache[right_date]
-        right_pos = self.valid_ids_pos[right_id]
-        left_id = self.id_cache[left_date]
-        left_pos = self.valid_ids_pos[left_id]
-
-        if left_date == right_date or right_pos - left_pos == 1:
-            raise DateNotFoundError()
-
-        pivot_pos = (left_pos + right_pos) // 2
-        pivot_date = self._get_date(self.valid_ids[pivot_pos])
-
-        if pivot_date < date:
-            return self._get_first_id(date, pivot_date, right_date)
-        else:
-            return self._get_first_id(date, left_date, pivot_date)
-
-    def get_first_by_date(self, date):
-        """
-        @raises DateNotFoundError, if no unit could be found on 'date'
-        @returns id
-        """
-        # We first search our cache to minimize the calls made to the website we're scraping
-        id_cache = sorted(self.id_cache.items(), key=itemgetter(0))
-
-        # First determine left pivot..
-        left_date, left_id = self.get_oldest()
-        for cached_date, cached_id in id_cache:
-            if cached_date > date:
-                break
-
-            if cached_date > left_date:
-                left_id, left_date = cached_id, cached_date
-
-        # Right pivot..
-        right_date, right_id = self.get_latest()
-        for cached_date, cached_id in reversed(id_cache):
-            if cached_date < date:
-                break
-
-            if cached_date < right_date:
-                right_id, right_date = cached_id, cached_date
-
-        # Perform binary search for found interval
-        return self._get_first_id(date, left_date, right_date)
-
-
-class BinarySearchDateRangeScraper(DateRangeScraper, BinarySearchScraper):
-    """
-
-    """
-    def _get_units(self, article_id):
-        first_pos = self.valid_ids_pos[article_id]
-        return map(self.scrape_unit, self.valid_ids[first_pos:])
-
-    def scrape(self):
-        article_id = None
-
-        for date in self.dates:
-            try:
-                article_id = self.get_first_by_date(date)
-            except DateNotFoundError:
-                pass
-            else:
-                break
-
-        if article_id is None:
-            return []
-
-        self._dump_id_cache()
-
-        articles = filter(None, self._get_units(article_id))
-        articles = filter(lambda a: to_date(a.properties["date"]) >= self.dates[0], articles)
-        articles = itertools.takewhile(lambda a: to_date(a.properties["date"]) <= self.dates[-1], articles)
-        return articles
-
-    def scrape_unit(self, id):
-        raise NotImplementedError("scrape_unit() not implemented.")
-
 
 def quit_browser(browser):
     try:
