@@ -118,6 +118,11 @@ class NRCScraper(LoginMixin, UnitScraper, DateRangeScraper):
         return article
 
 
-if __name__ == '__main__':
-    setup_logging()
-    NRCScraper().run()
+class NRCHandelsbladScraper(NRCScraper):
+    publisher = "NRC Handelsblad"
+    nrc_version = "NH"
+
+
+class NRCNextScraper(NRCScraper):
+    publisher = "NRC.NEXT"
+    nrc_version = "NN"

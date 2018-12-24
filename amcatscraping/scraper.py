@@ -373,6 +373,8 @@ class NotVisible(Exception):
 class SeleniumMixin(object):
     def setup_session(self):
         options = webdriver.ChromeOptions()
+        prefs = {'profile.managed_default_content_settings.images': 2}
+        options.add_experimental_option('prefs', prefs)
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument("--window-size=1920,1080")
         if not "--no-headless" in sys.argv:

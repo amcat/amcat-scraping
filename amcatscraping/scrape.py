@@ -19,10 +19,8 @@
 """Run scraper
 
 Usage:
-  scrape.py run [options] [<scraper>...]
-  scrape.py list
-  scrape.py report [--email] [--date=<date>]
-  scrape.py log <uuid>
+  scrape.py [options] <scraper>
+  scrape.py -l | --list-scrapers
   scrape.py -h | --help
 
 Options:
@@ -31,39 +29,20 @@ Options:
   --to=<date>              Scrape articles up to and including date (default: today)
   --dry-run                Do not commit to database
   --no-headless            Instruct Chromium to create window
-  --no-deduplicate-on-url  Do not dedpulicate based on URL
-  --use-http-url-db        Instead of running expensive queries, use precached
-                           http url cache, stored at https://example-amcat.nl/media/urls/
   --batch-size=<n>         If running in batched mode, this determines the batch size. For continuous
                            scrapers a low value is suitable for "real-time" purposes (default: 100).
-  --update                 Update comment threads of existing articles
-
 """
 import amcatscraping.setup_django
-import amcatscraping.scraper
 import configparser
-import collections
-import glob
-import io
-import json
 import logging
 import os.path
-import sys
-import jinja2
 import datetime
 import tabulate
-import uuid
-import errno
+import sys
 
 from iso8601.iso8601 import parse_date
-from email.utils import formatdate
-from django.core.mail import EmailMultiAlternatives, get_connection
 from amcatscraping.tools import get_boolean, to_date
 from amcatscraping.scraper import SeleniumMixin
-
-
-JINJA_ENV = jinja2.Environment(loader=jinja2.PackageLoader('amcatscraping', 'templates'))
-EMAIL_TEMPLATE = JINJA_ENV.get_template('log_email.html')
 
 
 log = logging.getLogger(__name__)
@@ -72,12 +51,8 @@ MODULE_PATH = os.path.abspath(os.path.join(*amcatscraping.__path__))
 ROOT_PATH = os.path.abspath(os.path.join(MODULE_PATH, ".."))
 DEFAULT_CONFIG_FILE = os.path.join(MODULE_PATH, "default.conf")
 USER_CONFIG_FILE = os.path.abspath(os.path.expanduser("~/.scrapers.conf"))
-LOG_DIR = os.path.expanduser("~/.cache/scraperlogs/")
-TODAY = datetime.date.today()
 
-SECTIONS = {"*", "store", "mail", "logging"}
-
-ScraperResult = collections.namedtuple("ScraperResult", ["name", "narticles", "failed", "log"])
+SECTIONS = {"*", "store"}
 
 
 def get_scraper_class(scraper, relative_path):
@@ -129,12 +104,9 @@ def run_single(config, args, scraper_config, scraper_class):
         "username": username,
         "password": password,
         "scrape_comments": scrape_comments,
-        "log_errors": True,
         "min_date": min_date,
         "max_date": max_date,
         "dry_run": args["--dry-run"],
-        "deduplicate_on_url": not args["--no-deduplicate-on-url"],
-        "use_http_url_db": args["--use-http-url-db"],
         "batch_size": int(args.get("--batch-size") or 100)
     }
 
@@ -148,141 +120,32 @@ def run_single(config, args, scraper_config, scraper_class):
             del raw_opts[opt]
 
     opts["options"] = raw_opts
-    method = "run_update" if args["--update"] else "run"
+
+    scraper = scraper_class(**opts)
 
     try:
-        scraper = scraper_class(**opts)
-    except:
-        log.exception("Constructing scraper {scraper_class.__name__} resulted in an exception:".format(**locals()))
-    else:
-        try:
-            scraper.setup_session()
-            return list(getattr(scraper, method)()), False
-        except NotImplementedError:
-            if args["--update"]:
-                log.info("Updating not implemented for {scraper_class.__name__}".format(**locals()))
-            else:
-                log.exception("Running scraper {scraper_class.__name__} resulted in an exception:".format(**locals()))
-        except Exception as e:
-            log.exception("Running scraper {scraper_class.__name__} resulted in an exception:".format(**locals()))
-        finally:
-           if isinstance(scraper, SeleniumMixin):
-                try:
-                    os.makedirs("artifacts", exist_ok=True)
-                    html = scraper.browser.execute_script("return document.body.outerHTML;")
-                    open("artifacts/last_sight.html","w").write(html)
-                    scraper.browser.save_screenshot("artifacts/last_sight.png")
-                except:
-                    log.exception("Taking screenshot of {scraper_class.__name__} resulted in an exception:".format(**locals()))
-
-    return [], True
+        scraper.setup_session()
+        scraper.run()
+    finally:
+        if isinstance(scraper, SeleniumMixin):
+            os.makedirs("artifacts", exist_ok=True)
+            html = scraper.browser.execute_script("return document.body.outerHTML;")
+            open("artifacts/last_sight.html", "w").write(html)
+            scraper.browser.save_screenshot("artifacts/last_sight.png")
 
 
-def _run(config, args, scrapers):
+def run(config, args, scraper: str):
     all_scrapers = dict(get_scrapers(config))
-    scrapers = {label: all_scrapers[label] for label in scrapers} or all_scrapers
 
-    if not scrapers:
-        print("No scrapers found.")
-        sys.exit(1)
-
-    non_existing_scrapers = set(scrapers) - set(all_scrapers)
-    if non_existing_scrapers:
-        print("Scraper(s) not found: %s. Use:\n" % ", ".join(non_existing_scrapers))
-        print("\tscrape.py list\n")
+    scraper = all_scrapers.get(scraper)
+    if scraper is None:
+        print("Scraper not found: {}. Use:\n".format(scraper))
+        print("\tscrape.py -l\n")
         print("to list existing scrapers")
         sys.exit(1)
 
-    root_logger = logging.getLogger(amcatscraping.scraper.__name__)
-    for label, scraper in scrapers.items():
-        log_buffer = io.StringIO()
-        log_handler = logging.StreamHandler(log_buffer)
-        root_logger.addHandler(log_handler)
-
-        scraper_class = get_scraper_class(scraper, scraper["class"])
-        articles, failed = run_single(config, args, scraper, scraper_class)
-
-        root_logger.removeHandler(log_handler)
-        yield ScraperResult(label, len(articles), failed, log_buffer.getvalue())
-
-
-def run(config, args, scrapers):
-    """Run scrapers and write logs afterwards"""
-    logs = collections.OrderedDict()
-    for label, narticles, failed, log in _run(config, args, scrapers):
-        logs[label] = (datetime.datetime.now(), narticles, failed, log)
-
-    identifier = str(uuid.uuid4())
-    log_dir = os.path.join(LOG_DIR, TODAY.strftime("%Y-%m-%d"))
-    log_file = os.path.join(log_dir, identifier + ".json")
-
-    try:
-        os.makedirs(log_dir)
-    except OSError as exception:
-        if exception.errno != errno.EEXIST:
-            raise
-
-    failed_found = False
-    for label, (timestamp, narticles, failed, log) in logs.items():
-        failed_found = failed or failed_found
-        json.dump({
-            "narticles": narticles, "log": log, "label": label,
-            "timestamp": int(timestamp.strftime("%s")),
-            "update": args["--update"], "uuid": identifier,
-            "failed": failed
-        }, open(log_file, "w"))
-
-    return not failed_found
-
-
-def _bool_to_str(val):
-    if val is None:
-        return ""
-    return "Yes" if val else "No"
-
-
-def get_logs(date):
-    log_dir = os.path.join(LOG_DIR, date.strftime("%Y-%m-%d"))
-    files = glob.glob(os.path.join(log_dir, "*.json"))
-    logs = map(json.load, map(open, files))
-    logs = sorted(logs, key=lambda l: (l['label'], l['timestamp']))
-
-    for log in logs:
-        log["timestamp"] = datetime.datetime.fromtimestamp(log["timestamp"]).isoformat()
-        log["update"] = _bool_to_str(log.get("update"))
-        log["failed"] = _bool_to_str(log.get("failed"))
-
-    return logs
-
-
-def report(config, args):
-    date = args.get('--date')
-    date = TODAY if date is None else parse_date(date).date()
-
-    headers = ["label", "timestamp", "narticles", "update", "failed", "uuid"]
-    table_data = [[log[h] for h in headers] for log in get_logs(date)]
-
-    if table_data:
-        print(tabulate.tabulate(table_data, headers=headers))
-        print("\nUse 'scrape log <uuid>' to view the logs of a particular run.")
-    else:
-        print("No logs found for {date}".format(date=date))
-        return
-
-    if args["--email"]:
-        print("Sending report above via email.. ", end="")
-        _send_email(config, headers, table_data)
-        print("OK.")
-
-def _log(config, args):
-    file = glob.glob(os.path.join(LOG_DIR, "*/{}.json".format(args["<uuid>"])))
-
-    assert(len(file) <= 1)
-
-    try:
-        print(json.load(open(file[0]))["log"].strip())
-    except IndexError:
-        print("No log found for {}".format(args["<uuid>"]))
+    scraper_class = get_scraper_class(scraper, scraper["class"])
+    run_single(config, args, scraper, scraper_class)
 
 
 def get_connection_config(config):
@@ -297,23 +160,6 @@ def get_connection_config(config):
             "username": config.get("mail", "username"),
             "password": config.get("mail", "password"),
         }
-
-
-def _send_email(config, headers, table_data):
-    table_html = tabulate.tabulate(table_data, headers=headers)
-    html_content = EMAIL_TEMPLATE.render(table=table_html, today=TODAY)
-    connection = get_connection(**get_connection_config(config))
-
-    mail = EmailMultiAlternatives(
-        connection=connection,
-        subject="Scraper log for %s" % formatdate(),
-        body="Enable HTML viewing in your e-mail client. Sorry :-(.",
-        from_email=config.get("mail", "from"),
-        to=config.get("mail", "to").split(",")
-    )
-
-    mail.attach_alternative(html_content, 'text/html')
-    mail.send()
 
 
 def get_config():
@@ -337,36 +183,24 @@ def get_scrapers(config):
 
 def list_scrapers(config):
     print("Config file: ~/.scrapers.conf")
-    for scraper_label, scraper in get_scrapers(config):
-        print("")
-        print("[%s]" % scraper_label)
-        print("username: %s" % scraper.get("username"))
-        print("class: %s" % scraper.get("class"))
-        print("project: %s" % scraper.get("project"))
-        print("articleset: %s" % scraper.get("articleset"))
+
+    scrapers = [(label, scraper.get("class")) for label, scraper in get_scrapers(config)]
+    scrapers = sorted(scrapers, key=lambda s: s[0].lower())
+
+    if scrapers:
+        print(tabulate.tabulate(scrapers, headers=["Name", "class"]))
     else:
         print("\nNo scrapers configured")
 
 
 def main(config, args):
-    if args["list"]:
+    if args["-l"] or args["--list-scrapers"]:
         return list_scrapers(config)
+    run(config, args, args["<scraper>"])
 
-    if args["run"]:
-        if run(config, args, args["<scraper>"]):
-            sys.exit(0)
-        else:
-            sys.exit(1)
-
-    if args["report"]:
-        return report(config, args)
-
-    if args["log"]:
-        return _log(config, args)
 
 if __name__ == '__main__':
     from docopt import docopt
 
     amcatscraping.tools.setup_logging()
     main(get_config(), docopt(__doc__, sys.argv[1:]))
-

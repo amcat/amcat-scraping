@@ -218,3 +218,15 @@ class AlgemeenDagbladScraper(EPagesScraper):
     login_url = "http://krant.ad.nl/"
     editions = ["Algemeen Dagblad"]
 
+
+class VolkskrantScraper(ad_trouw_volkskrant.EPagesScraper):
+    cookies_ok_button = ".button--accept"
+    login_url = "http://krant.volkskrant.nl/"
+    publisher = "Volkskrant"
+    allow_missing_login = True
+
+
+class TrouwScraper(ad_trouw_volkskrant.EPagesScraper):
+    cookies_ok_button = ".btn.btn--accept"
+    login_url = "http://krant.trouw.nl/"
+    publisher = "Trouw"
