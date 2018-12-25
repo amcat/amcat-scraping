@@ -75,7 +75,7 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, UnitScr
             raise
         return super(EPagesScraper, self).login(username, password)
 
-    def shadow(self, selectors):
+    def shadow(self, selectors, tries=5):
         *selectors, last_selector = selectors
         selectors = ['querySelector("{}").shadowRoot'.format(s) for s in selectors]
         script = 'return document.{}.querySelector("{}");'.format(".".join(selectors), last_selector)
@@ -85,7 +85,7 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, UnitScr
             try:
                 return self.browser.execute_script(script)
             except Exception as e:
-                if n == 7:
+                if n >= tries:
                     raise
                 else:
                     n += 1
@@ -109,16 +109,20 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, UnitScr
                     self.click(button)
 
         # Go to archive and select paper of this date
+        time.sleep(2)
         main = self.shadow(["#main", "#main", "#coverView", "#others"])
         self.click_script(self.wait("paper-button.showMoreButton", on=main))
 
-        archive = self.shadow(["#main", "#main", "#archiveView", "#currentPage"])
-
         time.sleep(2)
+        archive = self.shadow(["#main", "#main", "#archiveView", "#currentPage"])
         self.wait("archive-issue", on=archive)
 
         for archive_issue in archive.find_elements_by_css_selector("archive-issue"):
-            archive_date = self.shadow_root(archive_issue, ".issueDate").text.strip()
+            issue_date_root = self.shadow_root(archive_issue, ".issueDate")
+            if issue_date_root is None:
+                continue
+
+            archive_date = issue_date_root.text.strip()
             if not archive_date:
                 continue
             if dutch_strptime(archive_date, "%d %B %Y").date() == date:
@@ -219,14 +223,14 @@ class AlgemeenDagbladScraper(EPagesScraper):
     editions = ["Algemeen Dagblad"]
 
 
-class VolkskrantScraper(ad_trouw_volkskrant.EPagesScraper):
+class VolkskrantScraper(EPagesScraper):
     cookies_ok_button = ".button--accept"
     login_url = "http://krant.volkskrant.nl/"
     publisher = "Volkskrant"
     allow_missing_login = True
 
 
-class TrouwScraper(ad_trouw_volkskrant.EPagesScraper):
+class TrouwScraper(EPagesScraper):
     cookies_ok_button = ".btn.btn--accept"
     login_url = "http://krant.trouw.nl/"
     publisher = "Trouw"
