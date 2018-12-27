@@ -34,7 +34,7 @@ from urllib.parse import urljoin, urlparse, unquote
 from amcat.models import Article
 from amcatscraping.scraper import SeleniumMixin, \
     SeleniumLoginMixin, UnitScraper, Units
-from amcatscraping.tools import html2text, listify
+from amcatscraping.tools import html2text, listify, strip_query
 
 log = logging.getLogger(__name__)
 
@@ -216,7 +216,7 @@ class Nu(GenericScraper):
 
     @listify(wrapper=Units)
     def get_units(self):
-        for url in super().get_units():
+        for url in map(strip_query, super().get_units()):
             if any (b in url for b in self.blocked):
                 continue
             yield url

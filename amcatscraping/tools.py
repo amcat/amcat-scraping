@@ -20,6 +20,7 @@ import functools
 import logging
 import sys
 import datetime
+from urllib.parse import urlparse, urlunparse
 
 from html2text import HTML2Text
 from lxml import html, etree
@@ -28,6 +29,10 @@ log = logging.getLogger(__name__)
 
 
 ### MISC ###
+def strip_query(url: str) -> str:
+    (scheme, netloc, path, _params, _query, _fragment) = urlparse(url)
+    return urlunparse((scheme, netloc, path, '', '', ''))
+
 def unique(seq):
     seen = set()
     seen_add = seen.add
