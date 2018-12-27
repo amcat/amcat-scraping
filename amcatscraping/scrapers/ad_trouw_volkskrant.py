@@ -51,6 +51,7 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, UnitScr
     login_password_field = "#password"
     login_error_selector = ".message.message--error"
     allow_missing_login = True
+    do_not_load_images = False
 
     def click(self, element):
         try:
