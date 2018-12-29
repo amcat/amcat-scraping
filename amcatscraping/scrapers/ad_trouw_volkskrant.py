@@ -26,13 +26,14 @@ from collections import namedtuple
 
 from selenium.common.exceptions import ElementClickInterceptedException, \
     NoSuchElementException, WebDriverException
+from selenium.webdriver.common.keys import Keys
 
 from amcat.models import Article
 from amcatscraping.scraper import SeleniumLoginMixin, SeleniumMixin, \
     DateRangeScraper, Units, UnitScraper
 from amcatscraping.tools import html2text, listify
 
-EPagesUnit = namedtuple("EPagesUnit", ["url", "date", "title", "page", "screenshot", "text"])
+EPagesUnit = namedtuple("EPagesUnit", ["url", "date", "title", "page", "text"])
 
 
 def dutch_strptime(date, pattern):
@@ -43,7 +44,52 @@ def dutch_strptime(date, pattern):
     finally:
         locale.setlocale(locale.LC_ALL, loc)
 
-class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, UnitScraper):
+
+def get_article_id_from_url(url):
+    url = list(url.split("/"))
+    return "/".join(url[url.index("articles") + 1:])
+
+
+def get_url(base_url, ref_id):
+    return urljoin(base_url, str(ref_id))
+
+
+def get_page_from_url(url):
+    return int(get_article_id_from_url(url).split("/")[1])
+
+
+def collect_headers(els):
+    for el in els:
+        el_text = el.get_property("textContent").strip()
+        if el_text:
+            yield (el, el_text)
+
+
+def parse_article(article, date, page, url):
+    h1s = list(collect_headers(article.find_elements_by_css_selector(".articleListItem > h1")))
+    h2s = list(collect_headers(article.find_elements_by_css_selector(".articleListItem > h2")))
+    h3s = list(collect_headers(article.find_elements_by_css_selector(".articleListItem > h3")))
+
+    if h1s:
+        _, title = h1s.pop(0)
+    elif h2s:
+        _, title = h2s.pop(0)
+    else:
+        _, title = h3s.pop(0)
+
+    try:
+        content = article.find_element_by_css_selector("div.content").get_property("outerHTML")
+    except NoSuchElementException:
+        return None
+
+    subtitles = [element.get_property("outerHTML") for element, _ in h1s + h2s + h3s]
+    article_html = "".join(subtitles) + content
+    text = html2text(article_html)
+
+    return EPagesUnit(url, date, title, page, text)
+
+
+class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, UnitScraper, DateRangeScraper):
     cookies_ok_button = None
     editions = None
     login_url = None
@@ -76,24 +122,9 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, UnitScr
             raise
         return super(EPagesScraper, self).login(username, password)
 
-    def shadow(self, selectors, tries=5):
-        *selectors, last_selector = selectors
-        selectors = ['querySelector("{}").shadowRoot'.format(s) for s in selectors]
-        script = 'return document.{}.querySelector("{}");'.format(".".join(selectors), last_selector)
-
-        n = 0
-        while True:
-            try:
-                return self.browser.execute_script(script)
-            except Exception as e:
-                if n >= tries:
-                    raise
-                else:
-                    n += 1
-                    time.sleep(n)
-
     def shadow_root(self, element, selector):
-        return self.browser.execute_script("return arguments[0].shadowRoot.querySelector(arguments[1]);", element, selector)
+        return self.browser.execute_script("return arguments[0].shadowRoot.querySelector(arguments[1]);", element,
+                                           selector)
 
     def get_url_from_unit(self, unit: EPagesUnit) -> str:
         return unit.url
@@ -103,7 +134,7 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, UnitScr
         self.browser.get(self.login_url)
 
         if edition is not None:
-            regions = self.shadow(["#main", "#main", "#regionPicker", "#mainContainer"])
+            regions = self.wait_shadow("#main >>> #main >>> #regionPicker >>> #mainContainer")
             for button in regions.find_elements_by_css_selector("paper-button"):
                 name = json.loads(button.get_attribute("data-region"))["name"]
                 if name == edition:
@@ -111,11 +142,10 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, UnitScr
 
         # Go to archive and select paper of this date
         time.sleep(2)
-        main = self.shadow(["#main", "#main", "#coverView", "#others"])
-        self.click_script(self.wait("paper-button.showMoreButton", on=main))
+        self.click_script(self.wait_shadow("#main >>> #main >>> #coverView >>> #others paper-button.showMoreButton"))
 
         time.sleep(2)
-        archive = self.shadow(["#main", "#main", "#archiveView", "#currentPage"])
+        archive = self.wait_shadow("#main >>> #main >>> #archiveView >>> #currentPage")
         self.wait("archive-issue", on=archive)
 
         for archive_issue in archive.find_elements_by_css_selector("archive-issue"):
@@ -133,8 +163,8 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, UnitScr
             return
 
         # Scrape unit
-        time.sleep(2)
-        iframe = self.shadow(["#main", "#main", "issue-view", "#issue"])
+        time.sleep(10)
+        iframe = self.wait_shadow("#main >>> #main >>> issue-view >>> #issue")
         self.browser.switch_to_frame(iframe)
         self.click_script(self.wait("#articleMenuItem"))
 
@@ -143,60 +173,60 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, UnitScr
         article_list_buttons = self.browser.find_elements_by_css_selector("#articleListSectionsButtons > button")
         article_list_buttons = list(article_list_buttons) or [None]
 
+        base_url = self.browser.current_url + "/"
+        seen_article_ids = set()
+
+        # Get articles from article list
         for article_list_button in article_list_buttons:
             if article_list_button is not None:
                 self.click_script(article_list_button)
+
             time.sleep(2)
             articles = list(self.browser.find_elements_by_css_selector(".articleListItem"))
+            scraped_articles = list()
             for article in articles:
                 page = int(article.get_attribute("data-page"))
                 refid = article.get_attribute("data-refid")
-                url = urljoin(self.browser.current_url + "/", refid)
+                url = get_url(base_url, refid)
+                seen_article_ids.add(get_article_id_from_url(url))
+                article = parse_article(article, date, page, url)
+                if article is not None:
+                    scraped_articles.append(article)
+            self.set_flush_flag()
+            yield Units(scraped_articles)
 
-                def collect_headers(els):
-                    for el in els:
-                        el_text = el.get_property("textContent").strip()
-                        if el_text:
-                            yield (el, el_text)
+        # Article list skips articles sometimes, so we need to flick through the pages manually too..
+        self.wait("html").send_keys(Keys.ESCAPE)
 
-                h1s = list(collect_headers(article.find_elements_by_css_selector(".articleListItem > h1")))
-                h2s = list(collect_headers(article.find_elements_by_css_selector(".articleListItem > h2")))
-                h3s = list(collect_headers(article.find_elements_by_css_selector(".articleListItem > h3")))
+        time.sleep(3)
 
-                if h1s:
-                    _, title = h1s.pop(0)
-                elif h2s:
-                    _, title = h2s.pop(0)
-                else:
-                    _, title = h3s.pop(0)
+        scraped_articles = list()
+        while True:
+            book_scroller = self.wait("#bookScroller")
 
-                try:
-                    content = article.find_element_by_css_selector("div.content").get_property("outerHTML")
-                except NoSuchElementException:
+            for path in book_scroller.find_elements_by_tag_name("path"):
+                article_id = path.get_attribute("data-article")
+                if article_id is None:
+                    continue
+                if article_id in seen_article_ids:
                     continue
 
-                subtitles = [element.get_property("outerHTML") for element, _ in h1s + h2s + h3s]
-                article_html = "".join(subtitles) + content
-                text = html2text(article_html)
+                seen_article_ids.add(article_id)
+                url = get_url(base_url, article_id)
+                page = get_page_from_url(url)
 
-                #try:
-                #    author = article.find_element_by_css_selector(".byline").get_property("textContent").strip()
-                #except NoSuchElementException:
-                #    pass
-                #else:
-                #    print(author)
+                scraped_articles.append(
+                    EPagesUnit(url=url, date=date, title=None, page=page, text=None)
+                )
 
-                # Screenshot code:
-                # article.click()
-                # self.browser.switch_to_frame(self.wait("#articleViewContent > iframe"))
-                # screenshot = self.wait("#page article").screenshot_as_base64
-                # self.browser.switch_to_default_content()
-                # self.browser.switch_to_frame(self.wait("#issue"))
-                # self.wait("#articleNavigationBack").click()
-                # time.sleep(0.5)
-                screenshot = None
+            time.sleep(1.5)
 
-                yield EPagesUnit(url, date, title, page, screenshot, text)
+            try:
+                self.click_script(self.wait("#forwardArrows #nextPageArrow", timeout=2))
+            except:
+                break
+
+        yield Units(scraped_articles)
 
     @listify(wrapper=Units)
     def get_units(self):
@@ -208,6 +238,22 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, UnitScr
                 yield from self._get_units(date)
 
     def scrape_unit(self, unit: EPagesUnit):
+        if unit.text is None and unit.title is None:
+            self.browser.get(unit.url)
+
+            # This is an article not scraped at the overview page. We need to scrape it separately.
+            time.sleep(10)
+            iframe = self.wait_shadow("#main >>> #main >>> issue-view >>> #issue")
+            self.browser.switch_to_frame(iframe)
+
+            article_iframe = self.wait("#articleViewContent > iframe")
+            self.browser.switch_to_frame(article_iframe)
+
+            title = self.wait("article h1").text.strip()
+            text = html2text(self.wait("article").get_property("outerHTML"))
+
+            unit = EPagesUnit(unit.url, unit.date, title, unit.page, text)
+
         return Article(
             title=unit.title,
             url=unit.url,

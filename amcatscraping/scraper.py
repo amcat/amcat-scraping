@@ -272,7 +272,11 @@ class Units:
         self.units = list(units)
 
     def __iter__(self):
-        return iter(self.units)
+        for unit in self.units:
+            if isinstance(unit, Units):
+                yield from unit
+            else:
+                yield unit
 
 
 class UnitScraper(Scraper):
@@ -296,17 +300,8 @@ class UnitScraper(Scraper):
         raise NotImplementedError("Subclasses should implement get_unit()")
 
     def scrape(self) -> Iterable[Union[Article, ArticleTree]]:
-        units_or_iterable = self.get_units()
-        if isinstance(units_or_iterable, Units):
-            uiterable = [units_or_iterable]
-        else:
-            uiterable = units_or_iterable
-
-        for unit_or_units in uiterable:
-            if isinstance(unit_or_units, Units):
-                units = unit_or_units.units
-            else:
-                units = [unit_or_units]
+        for unit in self.get_units():
+            units = list(iter(unit) if isinstance(unit, Units) else (unit,))
 
             n_units_before = len(units)
             units = list(self.filter_existing_urls_by(units, self.get_url_from_unit))
