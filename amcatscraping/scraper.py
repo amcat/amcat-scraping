@@ -387,6 +387,36 @@ class SeleniumMixin(object):
         atexit.register(quit_browser, self.browser)
         super(SeleniumMixin, self).setup_session()
 
+    def wait_shadow(self, selector, timeout=60, visible=True):
+        """Same as wait, but support DOM piercing selector (>>>)"""
+        start = datetime.datetime.now()
+
+        *shadow_selectors, selector = filter(None, map(str.strip, selector.split(">>>")))
+        if not shadow_selectors:
+            return self.wait(selector, timeout, visible)
+
+        selectors = ['querySelector("{}").shadowRoot'.format(s) for s in shadow_selectors]
+        script = 'return document.{};'.format(".".join(selectors))
+
+        rec_wait = max(1, int(timeout/10))
+
+        while True:
+            try:
+                on = self.browser.execute_script(script)
+            except:
+                seconds_forgone = (datetime.datetime.now() - start).total_seconds()
+                if seconds_forgone >= timeout:
+                    raise
+            else:
+                try:
+                    return self.wait(selector, rec_wait, visible, on=on)
+                except:
+                    seconds_forgone = (datetime.datetime.now() - start).total_seconds()
+                    if seconds_forgone >= timeout:
+                        raise
+
+            time.sleep(0.1)
+
     def wait(self, selector, timeout=60, visible=True, by=By.CSS_SELECTOR, on=None):
         start = datetime.datetime.now()
         on = on or self.browser
