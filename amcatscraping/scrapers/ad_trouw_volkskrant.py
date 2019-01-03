@@ -254,8 +254,12 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, UnitScraper, DateRangeScr
 
             unit = EPagesUnit(unit.url, unit.date, title, unit.page, text)
 
+        title = unit.title.strip()
+        if not title:
+            title = "[NO TITLE]"
+
         return Article(
-            title=unit.title,
+            title=title,
             url=unit.url,
             text=unit.text,
             pagenr_int=unit.page,
