@@ -311,6 +311,8 @@ class UnitScraper(Scraper):
 
             for unit in units:
                 log.info("Scraping {}..".format(self.get_url_from_unit(unit)))
+                sys.stdout.flush()
+                sys.stderr.flush()
                 article = self.scrape_unit(unit)
                 if article is not None:
                     yield article

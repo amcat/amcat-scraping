@@ -20,12 +20,13 @@ import json
 import time
 import datetime
 import locale
+import logging
 
 from urllib.parse import urljoin
 from collections import namedtuple
 
 from selenium.common.exceptions import ElementClickInterceptedException, \
-    NoSuchElementException, WebDriverException
+    NoSuchElementException, WebDriverException, StaleElementReferenceException
 from selenium.webdriver.common.keys import Keys
 
 from amcat.models import Article
@@ -35,6 +36,7 @@ from amcatscraping.tools import html2text, listify
 
 EPagesUnit = namedtuple("EPagesUnit", ["url", "date", "title", "page", "text"])
 
+log = logging.getLogger(__name__)
 
 def dutch_strptime(date, pattern):
     loc = locale.getlocale()
@@ -210,7 +212,6 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, UnitScraper, DateRangeScr
                 except Exception as e:
                     print("Skipping article: " + str(e))
                     continue
-
                 if article_id is None:
                     continue
                 if article_id in seen_article_ids:
@@ -233,7 +234,6 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, UnitScraper, DateRangeScr
 
         yield Units(scraped_articles)
 
-    @listify(wrapper=Units)
     def get_units(self):
         for date in self.dates:
             if self.editions is not None:
