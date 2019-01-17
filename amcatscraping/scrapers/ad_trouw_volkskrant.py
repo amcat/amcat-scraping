@@ -168,7 +168,7 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, UnitScraper, DateRangeScr
         self.browser.switch_to_frame(iframe)
         self.click_script(self.wait("#articleMenuItem"))
 
-        time.sleep(2)
+        time.sleep(5)
 
         article_list_buttons = self.browser.find_elements_by_css_selector("#articleListSectionsButtons > button")
         article_list_buttons = list(article_list_buttons) or [None]
@@ -181,7 +181,7 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, UnitScraper, DateRangeScr
             if article_list_button is not None:
                 self.click_script(article_list_button)
 
-            time.sleep(2)
+            time.sleep(5)
             articles = list(self.browser.find_elements_by_css_selector(".articleListItem"))
             scraped_articles = list()
             for article in articles:
@@ -254,8 +254,12 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, UnitScraper, DateRangeScr
 
             unit = EPagesUnit(unit.url, unit.date, title, unit.page, text)
 
+        title = unit.title.strip()
+        if not title:
+            title = "[NO TITLE]"
+
         return Article(
-            title=unit.title,
+            title=title,
             url=unit.url,
             text=unit.text,
             pagenr_int=unit.page,

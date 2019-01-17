@@ -97,7 +97,7 @@ class TelegraafScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Unit
 
         found = False
         for day_container in self.browser.find_elements_by_css_selector(".Day__date-container"):
-            paper_date_string = " ".join(day_container.text.split()[1:3] + ["2018"])
+            paper_date_string = " ".join(day_container.text.split()[1:3] + [str(datetime.date.today().year)])
             paper_date = dutch_strptime(paper_date_string, "%d %B %Y").date()
             if date == paper_date:
                 self.wait(".Day__button", on=day_container).click()
