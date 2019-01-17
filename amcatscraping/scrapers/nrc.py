@@ -48,8 +48,10 @@ class NRCScraper(LoginMixin, UnitScraper, DateRangeScraper):
 
         post = parse_form(login_doc.cssselect("#fm1")[0])
         post.update({"username": username, "password": password})
+        post.update({"rememberMe": "on"})
 
         response = self.session.post(login_url, post)
+
         return response.url.endswith("/overview")
 
     @listify(wrapper=Units)
