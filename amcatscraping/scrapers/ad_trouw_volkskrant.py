@@ -205,7 +205,12 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, UnitScraper, DateRangeScr
             book_scroller = self.wait("#bookScroller")
 
             for path in book_scroller.find_elements_by_tag_name("path"):
-                article_id = path.get_attribute("data-article")
+                try:
+                    article_id = path.get_attribute("data-article")
+                except Exception as e:
+                    print("Skipping article: " + str(e))
+                    continue
+
                 if article_id is None:
                     continue
                 if article_id in seen_article_ids:
