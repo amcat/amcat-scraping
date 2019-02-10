@@ -136,6 +136,8 @@ class GenericScraper(SeleniumMixin, UnitScraper):
                 if absolute_url not in seen:
                     yield absolute_url
                     seen.add(absolute_url)
+            else:
+                print("Ignoring: {}".format(absolute_url))
 
     def scrape_unit(self, url):
         self.browser.get(url)
