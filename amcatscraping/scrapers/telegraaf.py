@@ -48,7 +48,7 @@ class TelegraafScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Unit
     publisher = "De Telegraaf"
     cookies_ok_button = "form .CookiesOK"
     editions = None
-    login_url = "https://digitalpublishing.telegraaf.nl/static/krant/#login"
+    login_url = "https://digitalpublishing.telegraaf.nl/static/krant/"
     login_username_field = "#id_email"
     login_password_field = "#id_password"
     login_error_selector = ".content > .error"
@@ -72,7 +72,9 @@ class TelegraafScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Unit
         #        return True
         #    raise
 
-        self.wait(".Header-User__login-link").click()
+        self.wait(".Issue__link").click()
+        self.wait("#popup-root .Prompt-Button--secondary").click()
+
         self.wait(self.login_username_field).send_keys(username)
         self.wait(self.login_password_field).send_keys(password)
         self.wait(self.login_password_field).send_keys(Keys.ENTER)
