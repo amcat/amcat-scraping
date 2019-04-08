@@ -142,6 +142,12 @@ class NRCScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper,
         article_html = article.get_attribute("innerHTML")
         text = html2text(article_html)
 
+        if not title:
+            title = "[NO TITLE]"
+
+        if not text:
+            text = "[NO TEXT]"
+
         article = Article(date=date, title=title, text=text, url=url)
         article.set_property("pagenr_int", pagenr)
         article.set_property("page", page)
