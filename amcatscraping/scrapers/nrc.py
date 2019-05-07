@@ -23,6 +23,8 @@ import json
 import locale
 import re
 
+from selenium.common.exceptions import NoSuchElementException
+
 from amcat.models import Article
 from amcatscraping.scraper import UnitScraper, DateRangeScraper, \
     Units, SeleniumMixin, SeleniumLoginMixin
@@ -125,6 +127,11 @@ class NRCScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper,
         (url, date, page) = unit
 
         self.browser.get(url)
+
+        try:
+            self.browser.find_element_by_css_selector("main .index-404")
+        except NoSuchElementException:
+            return
 
         url = self.browser.current_url
         title = self.get_meta("og:title")

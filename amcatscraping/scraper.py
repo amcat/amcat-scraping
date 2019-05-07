@@ -115,7 +115,7 @@ class Scraper(object):
         self.project_id = project_id
         self.articleset_id = articleset_id
 
-        self.no_api = False # Debugging switch
+        self.no_api = True # Debugging switch
         self.api_host = api_host
         self.api_user = api_user
         self.api_password = api_password
