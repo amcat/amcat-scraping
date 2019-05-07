@@ -31,6 +31,8 @@ import time
 from selenium.common.exceptions import NoSuchElementException
 from urllib.parse import urljoin, urlparse, unquote
 
+from selenium.webdriver.common.keys import Keys
+
 from amcat.models import Article
 from amcatscraping.scraper import SeleniumMixin, \
     SeleniumLoginMixin, UnitScraper, Units
@@ -86,6 +88,10 @@ class GenericScraper(SeleniumMixin, UnitScraper):
 
         self.browser.get(self.index_url)
         self.wait("html")
+
+        # Close annoying popups
+        time.sleep(1)
+        self.wait("html").send_keys(Keys.ESCAPE)
 
         if self.cookies:
             for name, morsel in http.cookies.BaseCookie(self.cookies).items():
