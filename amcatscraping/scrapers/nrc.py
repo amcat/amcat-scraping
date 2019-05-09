@@ -131,6 +131,8 @@ class NRCScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper,
         try:
             self.browser.find_element_by_css_selector("main .index-404")
         except NoSuchElementException:
+            pass
+        else:
             return
 
         url = self.browser.current_url
