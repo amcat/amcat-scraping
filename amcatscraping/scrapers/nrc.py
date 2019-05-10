@@ -75,6 +75,9 @@ class NRCScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper,
         if not url.startswith("https://www.nrc.nl/"):
             return False
 
+        if "/nieuws/" not in url:
+            return False
+
         return True
 
     def get_url_from_unit(self, unit: ArticleTuple) -> str:
