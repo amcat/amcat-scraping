@@ -24,6 +24,7 @@ import locale
 import re
 
 from selenium.common.exceptions import NoSuchElementException
+from selenium.webdriver.common.keys import Keys
 
 from amcat.models import Article
 from amcatscraping.scraper import UnitScraper, DateRangeScraper, \
@@ -94,6 +95,13 @@ class NRCScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper,
         self.browser.get(url)
 
         if self.browser.current_url == url:
+            try:
+                self.wait(".mijnnrc__modal__container.visible", timeout=5)
+            except NoSuchElementException:
+                pass
+            else:
+                self.wait("html").send_keys(Keys.ESCAPE)
+
             pages = self.wait(".paper__pages")
             for page in pages.find_elements_by_css_selector(".c-page"):
                 pagenr = page.get_attribute("id")[len("page-"):]
