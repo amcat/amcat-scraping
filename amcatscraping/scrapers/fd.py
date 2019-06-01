@@ -98,6 +98,9 @@ class FinancieelDagbladScraper(LoginMixin, UnitScraper, DateRangeScraper):
         paper_url = KRANT_URL.format(year=date.year, month=date.month, day=date.day)
 
         response = self.session.get(paper_url)
+        print("Requested", paper_url)
+        print("Got", response.url)
+
         if response.url != paper_url:
             # No paper published on this date
             return
