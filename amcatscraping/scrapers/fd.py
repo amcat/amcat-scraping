@@ -26,8 +26,9 @@ import logging
 import re
 
 
-from typing import Tuple
 from urllib import parse
+
+import requests.cookies
 
 from amcat.models import Article
 from amcatscraping.tools import parse_form, html2text, listify
@@ -86,6 +87,14 @@ class FinancieelDagbladScraper(LoginMixin, UnitScraper, DateRangeScraper):
         login_fail_url = login_form.cssselect("input[name=failureUrl]")[0].get("value")
         login_fail_url = parse.urljoin(LOGIN_URL, login_fail_url)
 
+        self.session.cookies.set_cookie(
+            requests.cookies.create_cookie(
+                domain='fd.nl',
+                name='cookieconsent',
+                value='true'
+            )
+        )
+
         # Login
         post_data = parse_form(login_form)
         post_data.update({"username": username, "password": password})
@@ -98,8 +107,6 @@ class FinancieelDagbladScraper(LoginMixin, UnitScraper, DateRangeScraper):
         paper_url = KRANT_URL.format(year=date.year, month=date.month, day=date.day)
 
         response = self.session.get(paper_url)
-        print("Requested", paper_url)
-        print("Got", response.url)
 
         if response.url != paper_url:
             # No paper published on this date
@@ -179,6 +186,8 @@ class FinancieelDagbladScraper(LoginMixin, UnitScraper, DateRangeScraper):
 
         if section:
             article.set_property("section", section.strip())
+
+        print("Title:", title)
 
         return article
 
