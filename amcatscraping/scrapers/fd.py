@@ -123,12 +123,11 @@ class FinancieelDagbladScraper(LoginMixin, UnitScraper, DateRangeScraper):
                     url = parse.urljoin(BASE_URL, a.get('href'))
                     yield ArticleTuple(date, int(match.group("page_num")), url)
 
-    @listify(wrapper=Units)
     def get_units(self):
         pages = map(self._get_pages, self.dates)
         pages = map(set, pages)
         pages = map(sorted, pages)
-        return itertools.chain.from_iterable(pages)
+        return [Units(itertools.chain.from_iterable(pages))]
 
     def get_url_from_unit(self, unit: ArticleTuple) -> str:
         return unit.url
