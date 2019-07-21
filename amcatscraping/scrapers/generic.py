@@ -248,12 +248,14 @@ class Nu(GenericScraper):
 
         return unit
 
+PERSGROUP_COOKIE_BUTTON = ".button.fjs-set-consent"
 
 class AD(SeleniumLoginMixin, GenericScraper):
     login_url = "https://www.ad.nl/inloggen"
     login_username_field = "#email"
     login_password_field = "#password"
     login_error_selector = ".message-block--error"
+    cookie_button = PERSGROUP_COOKIE_BUTTON
 
     index_url = "https://www.ad.nl/"
     article_url_re = "/[\w-]+/[\w-]+~[a-z0-9]+/"
@@ -271,7 +273,7 @@ class Volkskrant(SeleniumLoginMixin, GenericScraper):
     login_password_field = "#password"
     login_error_selector = ".form__error"
 
-    cookie_button = ".modal .button--accept"
+    cookie_button = PERSGROUP_COOKIE_BUTTON
     index_url = "https://www.volkskrant.nl/"
     article_url_re = "/[\w-]+/[\w-]+~[a-z0-9]+/"
 
@@ -291,7 +293,7 @@ class Trouw(SeleniumLoginMixin, GenericScraper):
     login_password_field = "#loginform_password"
     login_error_selector = ".form__error-description.fjs-login-error"
 
-    cookie_button = ".btn.btn--accept"
+    cookie_button = PERSGROUP_COOKIE_BUTTON
     index_url = "https://www.trouw.nl/"
     article_url_re = "/[\w-]+/[\w-]+~[a-z0-9]+/"
 
