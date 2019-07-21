@@ -289,17 +289,17 @@ class Volkskrant(SeleniumLoginMixin, GenericScraper):
 
 class Trouw(SeleniumLoginMixin, GenericScraper):
     login_url = "https://www.trouw.nl/account/login?url=/"
-    login_username_field = "#loginform_loginId"
-    login_password_field = "#loginform_password"
-    login_error_selector = ".form__error-description.fjs-login-error"
+    login_username_field = "#email"
+    login_password_field = "#password"
+    login_error_selector = ".form__error-text"
 
     cookie_button = PERSGROUP_COOKIE_BUTTON
     index_url = "https://www.trouw.nl/"
     article_url_re = "/[\w-]+/[\w-]+~[a-z0-9]+/"
 
     def get_date(self, doc):
-        date = self.browser.execute_script('return window.APP.article["publicationDateAndTime"]')
-        return dutch_strptime(date, "%H:%M, %d %B %Y")
+        date = doc.cssselect('meta[property="article:published_time"]')[0].get("content")
+        return dateutil.parser.parse(date)
 
 
 class FD(SeleniumLoginMixin, GenericScraper):
