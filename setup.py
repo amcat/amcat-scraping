@@ -13,7 +13,6 @@ setup(
               "amcatscraping.scrapers.newspapers",
               "amcatscraping.scrapers.blogs",
               "amcatscraping.scrapers.news",
-              "amcatscraping.scrapers.forums",
               ],
     package_data={
       'amcatscraping': ['*.conf', 'templates/*.html'],

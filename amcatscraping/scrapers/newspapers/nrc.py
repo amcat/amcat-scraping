@@ -25,10 +25,12 @@ import collections
 import lxml.html
 import re
 
+import logging
+
 from amcat.models import Article
 from amcatscraping.tools import setup_logging, parse_form
 from amcatscraping.scraper import LoginMixin, UnitScraper, DateRangeScraper
-
+from datetime import datetime
 
 OVERVIEW_URL = "https://login.nrc.nl/overview"
 
@@ -36,7 +38,7 @@ PUBLISHED_PREFIX = "Dit artikel werd gepubliceerd in"
 PUBLISHED_POSTFIX = " (?P<paper>[\.\w ]+) op (?P<date>[\w ,]+), pagina (?P<page>[\w -]+)"
 PUBLISHED_RE = re.compile(PUBLISHED_PREFIX + PUBLISHED_POSTFIX)
 
-ArticleTuple = collections.namedtuple("ArticleTuple", ["url", "date"])
+NRCUnit = collections.namedtuple("NRCUnit", ["docid", "url", "date", "pages", "sections", "image", "pdf"])
 
 
 class NRCScraper(LoginMixin, UnitScraper, DateRangeScraper):
@@ -44,77 +46,103 @@ class NRCScraper(LoginMixin, UnitScraper, DateRangeScraper):
 
     def login(self, username, password):
         login_page = self.session.get(OVERVIEW_URL)
+
         login_doc = lxml.html.fromstring(login_page.content)
         login_url = login_page.url
 
-        post = parse_form(login_doc.cssselect("#fm1")[0])
-        post.update({"username": username, "password": password})
+        login_form = parse_form(login_doc.cssselect("#fm1")[0])
+        login_form.update({"username": username, "password": password, "rememberMe": "on"})
 
-        response = self.session.post(login_url, post)
-        return response.url.endswith("/overview")
+        response = self.session.post(login_url, login_form, allow_redirects=False)
+
+        # check whether we are truly logged in
+        x = self.session.get("https://login.nrc.nl/overview")
+        open("/tmp/test.html", "wb").write(x.content)
+
+        return response.status_code == 302 # if login incorrect, it returns 401
 
     def get_units(self):
         for date in self.dates:
-            for doc in self.__getsections(date):
-                for a in doc.cssselect("ul.article-links li > a"):
-                    yield ArticleTuple(parse.urljoin(a.base_url, a.get('href')), date)
+            if date.weekday() == 6: # sunday
+                continue
+            data_url = f"https://www.nrc.nl/de/data/NH/{date.year}/{date.month}/{date.day}/"
+            r = self.session.get(data_url)
+            if r.status_code == 500:
+                logging.warning("HTTP 500, was there news on {date}?")
+                continue
+            data = r.json()
+            units = {}
+            for page in data['pages']:
+                for box in page['boxes']:
+                    if box['type'] == 'editorial':
+                        doc_id = box['document_id']
+                        if doc_id not in units:
+                            url = parse.urljoin("https://www.nrc.nl", box['url'])
+                            units[doc_id] = NRCUnit(doc_id, url, date, set(), set(),
+                                                    box['clipping_image_url'], box['clipping_pdf_url'])
+                        u = units[doc_id]
+                        if box['clipping_image_url'] != u.image or box['clipping_pdf_url'] != u.pdf:
+                            raise Exception("!!!")
+                        u.pages.add(page['number'] if page['book'] == 1 else int(page['index']))
+                        for section in page['sections']:
+                            u.sections.add(section)
+            yield from units.values()
 
-    def get_url_and_date_from_unit(self, unit: ArticleTuple) -> Tuple[str, datetime.date]:
-        return unit
+    def get_url_and_date_from_unit(self, unit: NRCUnit) -> Tuple[str, datetime.date]:
+        return unit.url, unit.date
 
-    def __getsections(self, date):
-        monthminus = date.month - 1
-        url1 = "http://digitaleeditie.nrc.nl/digitaleeditie/{self.nrc_version}/{date.year}/{monthminus}/{date.year}{date.month:02d}{date.day:02d}___/section1.html".format(**locals())
-        doc1 = self.session.get_html(url1)
-        yield doc1
-        for a in doc1.cssselect("ul.main-sections li:not(.active) a.section-link"):
-            yield self.session.get_html(parse.urljoin(a.base_url, a.get("href")))
-
-    def scrape_unit(self, unit):
-        url = unit.url
-        doc = self.session.get_html(url)
-        text = "\n\n".join([t.text_content() for t in doc.cssselect("em.intro,div.column-left p")])
-
-        if not text:
+    def scrape_unit(self, unit: NRCUnit):
+        m = re.match(r"https://www.nrc.nl/nieuws/(\d{4})/(\d{2})/(\d{2})/", unit.url)
+        if not m:
+            logging.warning(f"Invalid URL: {unit.url}")
             return None
-
-        datestr = url.split("/")[7].strip("_")
-        location = doc.cssselect("em.location")
-        person = doc.cssselect("p.by span.person")
-
-        published = doc.cssselect(".published")[0].text_content().strip()
-        published = PUBLISHED_RE.match(published).groupdict()
-
-        try:
-            pagenr = int(url.split("/")[8].split("_")[1])
-        except IndexError:
-            pagenr = int(published["page"].split("-")[0])
-
-        section_span = doc.cssselect("#Content ul.main-sections li.active span")
-        if section_span:
-            section = section_span[0].text
+        year = int(m.group(1))
+        month = int(m.group(2))
+        day = int(m.group(3))
+        online_date = datetime(year, month, day)
+        html = self.session.get_content(unit.url)
+        doc = lxml.html.fromstring(html, base_url=unit.url)
+        intro = doc.cssselect("div.intro")
+        if not intro:
+            logging.debug(f"Invalid intro: {unit.url}")
+            intro = ""
         else:
-            section = doc.cssselect("#Content .breadcrums a.previous")[0].text
+            intro2 = intro[0].text_content()
+        headline = doc.cssselect(".article-header-container h1")
+        if not headline:
+            headline2 = "-"
+            logging.warning(f"No headline {unit.url}")
+        else:
+            headline2 = headline[0].text_content()
+            if not headline2:
+                headline2 = "-"
+                logging.warning(f"Empty headline {unit.url}")
+        author = doc.cssselect("ul.article__byline__text.unstyled a")
+        if not author:
+            logging.debug(f"Invalid author: {unit.url}")
+            author2 = ""
+        else:
+            author2 = author[0].text_content()
+        text = doc.cssselect("div.article__content")
+        text2 = text[0].text_content()
+        text2 = re.sub(r"\s*\n\s*", "\n\n", text2).strip()
+        text2 = re.sub(r"[ \t]+", " ", text2).strip()
+        if intro:
+            text3 = f"{intro2},{text2}"
+        else:
+            text3 = f"{text2}"
 
-        date = datetime.datetime(*map(int, [datestr[:4], datestr[4:6], datestr[6:]]))
-        title = doc.cssselect("#MainContent h2")[0].text_content().strip() or "-"
-
-        article = Article(date=date, title=title, text=text, url=url)
-
-        author = person and person[0].text_content() or None
-        if author:
-            article.set_property("author", author)
-
-        location = location and location[0].text or None
-        if location:
-            article.set_property("location", location)
-
-        subtitle = "\n".join([h3.text_content() for h3 in doc.cssselect("div.column-left h3")])
-
-        article.set_property("subtitle", subtitle)
-        article.set_property("section", section)
-        article.set_property("pagenr_int", pagenr)
-
+        article = Article(date=unit.date,
+                          online_date=online_date,
+                          title=headline2,
+                          text=text3,
+                          url=unit.url,
+                          image_url=unit.image,
+                          pdf_url=unit.pdf,
+                          page_tag=unit.pages,
+                          section_tag=unit.sections,
+                          raw_html=html,
+                          author=author2)
         return article
 
 

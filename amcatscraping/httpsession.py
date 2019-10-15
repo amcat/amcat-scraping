@@ -40,10 +40,14 @@ class Session(requests.Session):
         })
 
     def get_html(self, link, **kwargs):
-        content = self.get(link, **kwargs).content  # type: bytes
-        content = content.decode(self.encoding)
+        content = self.get_content(link, **kwargs)
         result = lxml.html.fromstring(content, base_url=link)
         return result
+
+    def get_content(self, link, **kwargs):
+        response = self.get(link, **kwargs)
+        content = response.content  # type: bytes
+        return content.decode(self.encoding)
 
     def get_redirected_url(self, link, **kwargs):
         response = self.get(link, allow_redirects=False, **kwargs)
