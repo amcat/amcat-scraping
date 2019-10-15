@@ -16,6 +16,7 @@
 # You should have received a copy of the GNU Lesser General Public        #
 # License along with AmCAT.  If not, see <http://www.gnu.org/licenses/>.  #
 ###########################################################################
+import logging
 import time
 import datetime
 import locale
@@ -44,6 +45,14 @@ def dutch_strptime(date, pattern):
         locale.setlocale(locale.LC_ALL, loc)
 
 class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, DeduplicatingUnitScraper):
+    """
+    Note: This does not work in newer Firefox versions, possibly because of DOM shadow roots.
+    It is tested with geckodriver-v0.21.0 and firefox_61.0.1.
+    To test, you can install an old version of firefox and prepend it to your path
+    To run firefox standalone, make sure to
+    - create a profile with prefs.js including user_pref("app.update.enabled", false);
+    - call firefox with ./firefox --profile /path/to/profile --new-instance
+    """
     cookies_ok_button = None
     editions = None
     login_url = None
@@ -77,7 +86,7 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedupli
     def get_deduplicate_key_from_unit(self, unit: EPagesUnit) -> str:
         return unit.url
 
-    def _get_deduplicate_units(self, date, edition=None):
+    def _get_deduplicate_units(self, date: datetime.datetime, edition=None):
         # Select edition
         self.browser.get(self.login_url)
 
@@ -86,6 +95,31 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedupli
 
         # Go to archive and select paper of this date
         self.wait("paper-button.showMoreButton").click()
+
+        # click "Archief" button
+        self.wait('archive-calendar-button').click()
+
+        # find correct year
+        while True:
+            picked_year = int(self.wait('#yearSelection > div > div.vl-date-picker').text)
+            if picked_year == date.year:
+                break
+            year_buttons = self.browser.find_elements_by_css_selector("#yearSelection iron-icon")
+            if picked_year > date.year:
+                year_buttons[0].click()
+            elif len(year_buttons) > 1:
+                year_buttons[1].click()
+            else:
+                raise Exception(f"Only one year button, bu"
+                                f"t {picked_year} < {date.year}")
+
+        # find correct month
+        self.wait("#monthSelection").find_element_by_xpath(f"//paper-button[@data-month={date.month-1}]").click()
+        # find correct day
+        day_button = self.wait("#daySelection").find_element_by_xpath(f"//paper-button[@data-current and @data-day={date.day}]")
+
+        day_button.click()
+        self.wait("#selectButton").click()
 
         for archive_issue in self.browser.find_elements_by_css_selector("archive-issue"):
             try:
@@ -98,6 +132,7 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedupli
                 archive_issue.click()
                 break
         else:
+            logging.warning(f"Could not find date {date}")
             return
 
         # Scrape unit
