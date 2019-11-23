@@ -38,6 +38,8 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.by import By
 
 from amcat.models import PropertyMappingJSONEncoder
+from selenium.webdriver.remote.webelement import WebElement
+
 from .httpsession import Session
 from .tools import to_date, memoize, open_json_cache
 from amcatclient.amcatclient import AmcatAPI, APIError
@@ -261,6 +263,7 @@ class UnitScraper(Scraper):
             if self.deduplicate_on_url:
                 try:
                     url, date = self.get_url_and_date_from_unit(unit)
+                    print(f"url={url} and date = {date}")
                 except NotImplementedError:
                     pass
                 else:
@@ -271,6 +274,7 @@ class UnitScraper(Scraper):
 
             article = self.scrape_unit(unit)
             if article is not None:
+                print(f"article={article}")
                 yield article
 
     def get_url_and_date_from_unit(self, unit: Any) -> Tuple[str, datetime.date]:
@@ -561,37 +565,42 @@ class SeleniumMixin(object):
 
         super(SeleniumMixin, self).setup_session()
 
-    def wait(self, selector, timeout=60, visible=True, by=By.CSS_SELECTOR, on=None):
+    def wait(self, selector, timeout=60, visible=True, by=By.CSS_SELECTOR, on=None) -> WebElement:
+        """
+        Find a single element, wait until at least one (visible) element is found.
+        Raises NoSuchElementException or NotVisible if no (visible) element is found within the timeout.
+        """
+        for element in self.wait_multiple(selector, timeout=timeout, visible=visible, by=by, on=on):
+            return element
+
+    def wait_multiple(self, selector, timeout=60, visible=True, by=By.CSS_SELECTOR, on=None) -> List[WebElement]:
+        """
+        Find the specified elements, wait until at least one (visible) element is found.
+        Raises NoSuchElementException or NotVisible if no (visible) element is found within the timeout.
+        """
         start = datetime.datetime.now()
         on = on or self.browser
-
         while True:
             seconds_forgone = (datetime.datetime.now() - start).total_seconds()
-
-            try:
-                element = on.find_element(by, selector)
-                elements = on.find_elements(by, selector)
-            except NoSuchElementException:
+            elements = on.find_elements(by, selector)
+            if not elements:
                 if seconds_forgone > timeout:
-                    raise
-            else:
-                if not visible:
-                    return element
-                elif element.is_displayed():
-                    return element
-                elif elements:
-                    for e in elements:
-                        if e.is_displayed():
-                            return e
-
+                    raise NoSuchElementException(f"Could not find element(s): {selector}")
+                else:
+                    time.sleep(.5)
+                    continue
+            if visible:
+                elements = [e for e in elements if e.is_displayed()]
+            if not elements:
                 if seconds_forgone > timeout:
-                    raise NotVisible("Element present, but not visible: {}".format(selector))
-
-            time.sleep(0.5)
+                    raise NotVisible(f"Element(s) present, but not visible: {selector}")
+                else:
+                    time.sleep(.5)
+                    continue
+            return elements
 
     def get_browser_preferences(self):
         return ()
-
 
 
 class LoginMixin(object):
@@ -629,6 +638,7 @@ class SeleniumLoginMixin(LoginMixin):
         try:
             self.wait(self.login_error_selector, timeout=3)
         except (NoSuchElementException, NotVisible, StaleElementReferenceException):
+            log.error("no error, login succeeded?")
             return True
         else:
             return False

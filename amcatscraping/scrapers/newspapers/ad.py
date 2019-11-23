@@ -69,12 +69,11 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedupli
 
     def login(self, username, password):
         self.browser.get(self.login_url)
+        print(username, password)
         try:
             self.wait(self.cookies_ok_button).click()
         except NoSuchElementException:
-            if self.allow_missing_login:
-                return True
-            raise
+            pass  # no cookies, no problem
         return super(EPagesScraper, self).login(username, password)
 
     def get_url_and_date_from_unit(self, unit: EPagesUnit) -> Tuple[str, datetime.date]:
@@ -88,10 +87,13 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedupli
 
     def _get_deduplicate_units(self, date: datetime.datetime, edition=None):
         # Select edition
+        logging.info(f"Selecting date {date}")
         self.browser.get(self.login_url)
 
         if edition is not None:
+            print(edition)
             self.click(self.wait('//div[text() = "{}"]'.format(edition), by=By.XPATH))
+
 
         # Go to archive and select paper of this date
         self.wait("paper-button.showMoreButton").click()
@@ -110,15 +112,20 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedupli
             elif len(year_buttons) > 1:
                 year_buttons[1].click()
             else:
-                raise Exception(f"Only one year button, bu"
-                                f"t {picked_year} < {date.year}")
+                raise Exception(f"Only one year button, but {picked_year} < {date.year}")
 
         # find correct month
         self.wait("#monthSelection").find_element_by_xpath(f"//paper-button[@data-month={date.month-1}]").click()
-        # find correct day
+        # find correct day -- wait 3 seconds to give date picker time to load
+        time.sleep(3)
         day_button = self.wait("#daySelection").find_element_by_xpath(f"//paper-button[@data-current and @data-day={date.day}]")
-
-        day_button.click()
+        logging.info(f'{date}: aria-disabled: {day_button.get_attribute("aria-disabled")}, active: {day_button.get_attribute("active")}')
+        if day_button.get_attribute("aria-disabled") == "true":
+            logging.warning(f"No newspaper for {date}, Sunday?")
+            return
+        if day_button.get_attribute("active") == "false":
+            # Don't click if correct day was already selected
+            day_button.click()
         self.wait("#selectButton").click()
 
         for archive_issue in self.browser.find_elements_by_css_selector("archive-issue"):
@@ -144,7 +151,7 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedupli
             seconds_forgone = (datetime.datetime.now() - start).total_seconds()
 
             try:
-                self.wait("#articleMenuItem", timeout=60).click()
+                self.wait("#articleMenuItem", timeout=10).click()
             except ElementClickInterceptedException:
                 pass
             else:
@@ -153,11 +160,10 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedupli
         article_list_buttons = self.browser.find_elements_by_css_selector("#articleListSectionsButtons > button")
         article_list_buttons = list(article_list_buttons) or [lambda: None]
 
-        time.sleep(2)
 
         for article_list_button in article_list_buttons:
-            article_list_button.click()
-            time.sleep(2)
+            if not "selected" in article_list_button.get_attribute("class"):
+                article_list_button.click()
             articles = list(self.browser.find_elements_by_css_selector(".articleListItem"))
             for article in articles:
                 page = int(article.get_attribute("data-page"))

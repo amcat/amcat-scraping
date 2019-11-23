@@ -46,6 +46,7 @@ class Session(requests.Session):
 
     def get_content(self, link, **kwargs):
         response = self.get(link, **kwargs)
+        response.raise_for_status()
         content = response.content  # type: bytes
         return content.decode(self.encoding)
 
@@ -53,6 +54,9 @@ class Session(requests.Session):
         response = self.get(link, allow_redirects=False, **kwargs)
         if response.status_code != 302:
             raise RedirectError(response.status_code, "Response did not return 302, but {} for {}.".format(response.status_code, link))
+        #if response.status_code == 404:
+         #   print(f"status_code={response.status_code}")
+          #  return None
         return response.headers["Location"]
 
     def get(self, link, tries=3, **kwargs):

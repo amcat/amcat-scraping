@@ -30,6 +30,8 @@ Options:
   --from=<date>            Scrape articles from date (default: today)
   --to=<date>              Scrape articles up to and including date (default: today)
   --dry-run                Do not commit to database
+  -v --verbose             Output debug messages
+  -q --quiet               Only output warnings and errors
   --no-deduplicate-on-url  Do not dedpulicate based on URL
   --batch-size=<n>         If running in batched mode, this determines the batch size. For continuous
                            scrapers a low value is suitable for "real-time" purposes (default: 100).
@@ -326,6 +328,8 @@ def list_scrapers(config):
 
 
 def main(config, args):
+    loglevel = (logging.DEBUG if args["--verbose"] else (logging.WARNING if args["--quiet"] else logging.INFO))
+    logging.basicConfig(format='[%(asctime)s %(levelname)8s] %(message)s', level=loglevel)
     if args["list"]:
         return list_scrapers(config)
 

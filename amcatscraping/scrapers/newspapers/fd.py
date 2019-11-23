@@ -29,6 +29,8 @@ import re
 from typing import Tuple
 from urllib import parse
 
+from requests import cookies, HTTPError
+
 from amcat.models import Article
 from amcatscraping.tools import parse_form, html2text
 from amcatscraping.scraper import LoginMixin, UnitScraper, DateRangeScraper
@@ -37,7 +39,6 @@ from amcatscraping.httpsession import RedirectError
 log = logging.getLogger(__name__)
 
 OLDEST_SUPPORTED_NEWSPAPER = datetime.date(2015, 12, 1)
-ACCEPT_COOKIE = {"cookieconsent": "true", "cookieLaw": "read"}
 ARTICLE_URL_RE = re.compile("""
     ^/HFD_
     (?P<year>\d{4})
@@ -51,9 +52,9 @@ ARTICLE_URL_RE = re.compile("""
 """, re.VERBOSE)
 
 # URLS
-BASE_URL = "https://fd.nl"
-LOGIN_URL = parse.urljoin(BASE_URL, "/login")
-KRANT_URL = parse.urljoin(BASE_URL, "/krant/{year}/{month:02d}/{day:02d}")
+BASE_URL = "https://fd.nl/"
+LOGIN_URL = parse.urljoin(BASE_URL, "login")
+KRANT_URL = parse.urljoin(BASE_URL, "krant/{year}/{month:02d}/{day:02d}")
 
 
 ArticleTuple = collections.namedtuple("ArticleTuple", ["date", "page_num", "url"])
@@ -74,31 +75,27 @@ class FinancieelDagbladScraper(LoginMixin, UnitScraper, DateRangeScraper):
     def login(self, username, password):
         # Set right cookies
         self.session.get(BASE_URL)
+        self.session.cookies.set_cookie(cookies.create_cookie(domain='fd.nl', name='cookieconsent', value='true'))
 
-        # HACK! FD has intermediate cert which is not downloaded automatically
-        # by requests/curl, so we disable ssl certification for the time being
-        # Please check whether this has been resolved and re-enable verification!
-        login_page = self.session.get(LOGIN_URL, verify=False, cookies=ACCEPT_COOKIE)
+        login_page = self.session.get(LOGIN_URL)
         login_doc = lxml.html.fromstring(login_page.content)
-        login_form = login_doc.cssselect("form.login")[0]
+        login_form = login_doc.cssselect(".modal-content form")[0]
         login_post_url = parse.urljoin(LOGIN_URL, login_form.get("action"))
-        login_fail_url = login_form.cssselect("input[name=failureUrl]")[0].get("value")
-        login_fail_url = parse.urljoin(LOGIN_URL, login_fail_url)
 
         # Login
         post_data = parse_form(login_form)
         post_data.update({"username": username, "password": password})
-        response = self.session.post(login_post_url, post_data, verify=False, allow_redirects=False)
+        response = self.session.post(login_post_url, post_data, verify=False, allow_redirects=True)
 
         # Check if logging in worked :)
-        return response.url != login_fail_url
+        return response.url == BASE_URL
 
     def _get_pages(self, date):
         paper_url = KRANT_URL.format(year=date.year, month=date.month, day=date.day)
 
         response = self.session.get(paper_url)
         if response.url != paper_url:
-            # No paper published on this date
+            logging.warning("No paper published on this date")
             return
 
         overview = lxml.html.fromstring(response.content.decode())
@@ -131,7 +128,16 @@ class FinancieelDagbladScraper(LoginMixin, UnitScraper, DateRangeScraper):
                 return None
             raise
 
-        text_doc = self.session.get_html(text_url)
+        try:
+            text_doc = self.session.get_html(text_url)
+        except HTTPError as e:
+            if e.response.status_code == 404:
+                logging.warning(f"{url} returned 404 skipping")
+                return None
+            else:
+                raise
+
+
 
         for image in text_doc.cssselect(".image"):
             image.getparent().remove(image)

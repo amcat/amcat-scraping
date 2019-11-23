@@ -27,6 +27,8 @@ import re
 
 import logging
 
+from requests import HTTPError
+
 from amcat.models import Article
 from amcatscraping.tools import setup_logging, parse_form
 from amcatscraping.scraper import LoginMixin, UnitScraper, DateRangeScraper
@@ -66,26 +68,36 @@ class NRCScraper(LoginMixin, UnitScraper, DateRangeScraper):
             if date.weekday() == 6: # sunday
                 continue
             data_url = f"https://www.nrc.nl/de/data/NH/{date.year}/{date.month}/{date.day}/"
+            logging.warning(f"Scraping {data_url}")
             r = self.session.get(data_url)
             if r.status_code == 500:
                 logging.warning("HTTP 500, was there news on {date}?")
                 continue
+            r.raise_for_status()
             data = r.json()
             units = {}
             for page in data['pages']:
                 for box in page['boxes']:
-                    if box['type'] == 'editorial':
-                        doc_id = box['document_id']
-                        if doc_id not in units:
-                            url = parse.urljoin("https://www.nrc.nl", box['url'])
-                            units[doc_id] = NRCUnit(doc_id, url, date, set(), set(),
-                                                    box['clipping_image_url'], box['clipping_pdf_url'])
-                        u = units[doc_id]
-                        if box['clipping_image_url'] != u.image or box['clipping_pdf_url'] != u.pdf:
-                            raise Exception("!!!")
-                        u.pages.add(page['number'] if page['book'] == 1 else int(page['index']))
-                        for section in page['sections']:
-                            u.sections.add(section)
+                    if box['type'] != 'editorial':
+                        continue
+                    if box['url'].startswith("https://images.nrc.nl/"):
+                        logging.warning(f"Skipping image url {box['url']}")
+                        continue
+                    #if not box['url'].startswith("/nieuws/"):
+                     #   raise Exception(f"Unexpected url: {box['url']}")
+                    doc_id = box['document_id']
+                    if doc_id not in units:
+                        url = parse.urljoin("https://www.nrc.nl", box['url'])
+                        units[doc_id] = NRCUnit(doc_id, url, date, set(), set(),
+                                                box['clipping_image_url'], box['clipping_pdf_url'])
+                    u = units[doc_id]
+                    if box['clipping_image_url'] != u.image:
+                        raise Exception(f"{u.url}: u.image {u.image} != box.image {box['clipping_image_url']}")
+                    if box['clipping_pdf_url'] != u.pdf:
+                        raise Exception(f"{u.url}: u.pdf {u.pdf} != box.pdf {box['clipping_pdf_url']}")
+                    u.pages.add(page['number'] if page['book'] == 1 else int(page['index']))
+                    for section in page['sections']:
+                        u.sections.add(section)
             yield from units.values()
 
     def get_url_and_date_from_unit(self, unit: NRCUnit) -> Tuple[str, datetime.date]:
@@ -100,7 +112,14 @@ class NRCScraper(LoginMixin, UnitScraper, DateRangeScraper):
         month = int(m.group(2))
         day = int(m.group(3))
         online_date = datetime(year, month, day)
-        html = self.session.get_content(unit.url)
+        try:
+            html = self.session.get_content(unit.url)
+        except HTTPError as e:
+            if e.response.status_code == 404:
+                logging.warning(f"No article found for {unit.url}")
+                return  # some articles don't exist, i.e. cartoons without text
+            raise
+
         doc = lxml.html.fromstring(html, base_url=unit.url)
         intro = doc.cssselect("div.intro")
         if not intro:
@@ -124,6 +143,8 @@ class NRCScraper(LoginMixin, UnitScraper, DateRangeScraper):
         else:
             author2 = author[0].text_content()
         text = doc.cssselect("div.article__content")
+        if not text:
+            raise Exception(f"no text for article {unit}")
         text2 = text[0].text_content()
         text2 = re.sub(r"\s*\n\s*", "\n\n", text2).strip()
         text2 = re.sub(r"[ \t]+", " ", text2).strip()

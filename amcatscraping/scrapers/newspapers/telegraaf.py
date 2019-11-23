@@ -17,6 +17,7 @@
 # License along with AmCAT.  If not, see <http://www.gnu.org/licenses/>.  #
 ###########################################################################
 import hashlib
+import logging
 import time
 import datetime
 import locale
@@ -63,6 +64,7 @@ class TelegraafScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedu
         except ElementClickInterceptedException:
             self.click(element.find_element_by_xpath(".."))
 
+
     def login(self, username, password):
         self.browser.get(self.login_url)
         #try:
@@ -87,6 +89,7 @@ class TelegraafScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedu
             return False
 
     def get_url_and_date_from_unit(self, unit: TelegraafUnit) -> Tuple[str, datetime.date]:
+        print(unit.url, unit.date)
         return unit.url, unit.date
 
     def get_deduplicate_key_from_article(self, article: Article) -> str:
@@ -103,9 +106,9 @@ class TelegraafScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedu
 
         found = False
         for day_container in self.browser.find_elements_by_css_selector(".Day__date-container"):
-            paper_date_string = " ".join(day_container.text.split()[1:3] + ["2018"])
+            paper_date_string = " ".join(day_container.text.split()[1:3] + ["2019"])
             paper_date = dutch_strptime(paper_date_string, "%d %B %Y").date()
-            print(paper_date_string, paper_date, date, paper_date==date)
+            print(f"datum krant {paper_date_string}, {paper_date}, {date}, {paper_date==date}")
             if date == paper_date:
                 self.wait(".Day__button", on=day_container).click()
                 found = True
@@ -114,7 +117,13 @@ class TelegraafScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedu
         if found:
             self.wait("#next-page-button")
             while self.next_button().is_displayed():
-                for article in self.browser.find_elements_by_css_selector(".pages-swiper-slide-active .article-layer"):
+                try:
+                    articles = self.wait_multiple(".pages-swiper-slide-active .article-layer")
+                except NoSuchElementException:
+                    logging.warning(f"Could not find article layer in {url}")
+                    articles = []
+
+                for article in articles:
                     self.click(article)
                     time.sleep(1.5)
 
@@ -131,27 +140,29 @@ class TelegraafScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedu
                     query += "&hash=" + hashlib.sha256(article_html.encode()).hexdigest()[:20]
                     url = parse.urlunparse((scheme, netloc, path, params, query, fragment))
                     page_range = fragment.split("/")[-1]
-
                     try:
                         title = self.wait("body > .head", timeout=2).text.strip()
-                    except:
-                        continue
-                    else:
-                        yield TelegraafUnit(url, date, title, text, page_range)
-                    finally:
-                        self.browser.switch_to_default_content()
-
-                        # Close modal
-                        self.wait(".article-modal-default-button").click()
-
-                        time.sleep(0.5)
-
+                    except NoSuchElementException:
+                        try:
+                            title = self.wait("body > .head1", timeout=2).text.strip()
+                        except NoSuchElementException:
+                            logging.warning(f"No title found: {url}")
+                            title = "-"
+                    if not title:
+                        logging.warning(f"Empty title for {url}")
+                        title = "-"
+                    yield TelegraafUnit(url, date, title, text, page_range)
+                    self.browser.switch_to_default_content()
+                    # Close modal
+                    self.wait(".article-modal-default-button").click()
+                    time.sleep(0.5)
 
                 self.next_button().click()
                 time.sleep(0.5)
 
     def get_deduplicate_units(self):
         for date in self.dates:
+            print(f"datum={date}")
             if self.editions is not None:
                 for edition in self.editions:
                     yield from self._get_deduplicate_units(date, edition)

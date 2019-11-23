@@ -234,7 +234,7 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedupli
 
 class AlgemeenDagbladScraper(EPagesScraper):
     cookies_ok_button = "a.fjs-accept"
-    publisher = "Algemeen Dagblad"
+    publisher = "AD_Rotterdam"
     login_url = "http://krant.ad.nl/"
-    editions = ["Algemeen Dagblad"]
+    editions = ["Rotterdam Stad"]
 
