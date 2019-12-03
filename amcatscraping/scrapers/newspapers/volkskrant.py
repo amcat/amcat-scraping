@@ -23,7 +23,8 @@ from amcatscraping.scrapers.newspapers import ad
 
 
 class VolkskrantScraper(ad.EPagesScraper):
-    cookies_ok_button = ".button--accept"
+    #cookies_ok_button = ".button--accept"
+    cookies_ok_button = "paper-button#acceptButton"
     login_url = "http://krant.volkskrant.nl/"
     publisher = "De Volkskrant"
     allow_missing_login = True

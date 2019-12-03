@@ -30,7 +30,8 @@ from selenium.common.exceptions import ElementClickInterceptedException, NoSuchE
 from selenium.webdriver.common.by import By
 
 from amcat.models import Article
-from amcatscraping.scraper import SeleniumLoginMixin, SeleniumMixin, DeduplicatingUnitScraper, DateRangeScraper
+from amcatscraping.scraper import SeleniumLoginMixin, SeleniumMixin, DeduplicatingUnitScraper, DateRangeScraper, \
+    NotVisible
 from amcatscraping.tools import html2text
 
 EPagesUnit = namedtuple("EPagesUnit", ["url", "date", "title", "page", "screenshot", "text"])
@@ -69,12 +70,14 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedupli
 
     def login(self, username, password):
         self.browser.get(self.login_url)
-        print(username, password)
-        try:
-            self.wait(self.cookies_ok_button).click()
-        except NoSuchElementException:
-            pass  # no cookies, no problem
+        self.accept_cookie()
         return super(EPagesScraper, self).login(username, password)
+
+    def accept_cookie(self, timeout=3):
+        try:
+            self.wait(self.cookies_ok_button, timeout=3).click()
+        except (NoSuchElementException, NotVisible):
+            pass  # no cookies, no problem
 
     def get_url_and_date_from_unit(self, unit: EPagesUnit) -> Tuple[str, datetime.date]:
         return unit.url, unit.date
@@ -88,15 +91,18 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedupli
     def _get_deduplicate_units(self, date: datetime.datetime, edition=None):
         # Select edition
         logging.info(f"Selecting date {date}")
+        self.accept_cookie(timeout=1)
+
         self.browser.get(self.login_url)
-
         if edition is not None:
-            print(edition)
             self.click(self.wait('//div[text() = "{}"]'.format(edition), by=By.XPATH))
-
 
         # Go to archive and select paper of this date
         self.wait("paper-button.showMoreButton").click()
+
+        # make sure right header is not hidden
+        header = self.wait('#rightHeader', visible=False)
+        self.browser.execute_script('arguments[0].removeAttribute("hidden");', header)
 
         # click "Archief" button
         self.wait('archive-calendar-button').click()
@@ -143,7 +149,7 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedupli
             return
 
         # Scrape unit
-        self.browser.switch_to_frame(self.wait("#issue"))
+        self.browser.switch_to_frame(self.wait("iframe#issue"))
 
         seconds_forgone = 0
         start = datetime.datetime.now()
@@ -159,7 +165,6 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedupli
 
         article_list_buttons = self.browser.find_elements_by_css_selector("#articleListSectionsButtons > button")
         article_list_buttons = list(article_list_buttons) or [lambda: None]
-
 
         for article_list_button in article_list_buttons:
             if not "selected" in article_list_button.get_attribute("class"):
@@ -232,9 +237,13 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedupli
             date=unit.date
         )
 
+
 class AlgemeenDagbladScraper(EPagesScraper):
-    cookies_ok_button = "a.fjs-accept"
+   # cookies_ok_button = "a.fjs-accept"
+    cookies_ok_button = "paper-button#acceptButton"
+    #cookies_ok_button = "paper-material"
     publisher = "Algemeen Dagblad"
     login_url = "http://krant.ad.nl/"
     editions = ["Algemeen Dagblad"]
+
 

@@ -23,6 +23,7 @@ from amcatscraping.scrapers.newspapers import ad
 
 
 class TrouwScraper(ad.EPagesScraper):
-    cookies_ok_button = ".btn.btn--accept"
+    #cookies_ok_button = ".btn.btn--accept"
+    cookies_ok_button = "paper-button#acceptButton"
     login_url = "http://krant.trouw.nl/"
     publisher = "Trouw"
