@@ -106,7 +106,7 @@ class TelegraafScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedu
 
         found = False
         for day_container in self.browser.find_elements_by_css_selector(".Day__date-container"):
-            paper_date_string = " ".join(day_container.text.split()[1:3] + ["2019"])
+            paper_date_string = " ".join(day_container.text.split()[1:3] + [str(date.year)])
             paper_date = dutch_strptime(paper_date_string, "%d %B %Y").date()
             print(f"datum krant {paper_date_string}, {paper_date}, {date}, {paper_date==date}")
             if date == paper_date:
