@@ -36,7 +36,8 @@ from amcatscraping.tools import html2text
 NewsdeskUnit = namedtuple("NewsdeskUnit", ["article_element", "article"])
 
 DATA_URL = "http://content.moreover.com/eApolloRequest?data="
-SEARCH_URL = "https://newsdesk.moreover.com/search"
+#SEARCH_URL = "https://newsdesk.moreover.com/search"
+SEARCH_URL ="https://www.newsdesk.lexisnexis.com/search"
 MEDIUMS = ["Gedrukte media"]
 LANGUAGES = ["Nederlands"]
 
@@ -65,10 +66,12 @@ def get_data_urls(article_element):
                 yield href
                 seen.add(href)
 
-
+# c = amcatscraping.scrapers.news.newsdesk.CONTEXT
+CONTEXT = {}
 class NewsdeskScraper(SeleniumLoginMixin, SeleniumMixin, DeduplicatingUnitScraper):
-    login_url = "https://newsdesk.moreover.com/index.html"
-    login_username_field = "#username"
+    #login_url = "https://newsdesk.moreover.com/index.html"
+    login_url = "https://signin.lexisnexis.com/lnaccess/app/signin?aci=nd&back=https%3A%2F%2Fwww.newsdesk.lexisnexis.com%2Flogin%2Fwam%2Fverify%3Fremember-me%3Dtrue"
+    login_username_field = "#userid"
     login_password_field = "#password"
     login_error_selector = "form .error_block"
 
@@ -91,6 +94,7 @@ class NewsdeskScraper(SeleniumLoginMixin, SeleniumMixin, DeduplicatingUnitScrape
         return article.url
 
     def get_deduplicate_units(self) -> Iterable[NewsdeskUnit]:
+        CONTEXT['browser'] = self.browser
         try:
             self.wait("._pendo-guide-dismiss_.no-thanks", timeout=5).click()
         except NoSuchElementException:
@@ -124,17 +128,20 @@ class NewsdeskScraper(SeleniumLoginMixin, SeleniumMixin, DeduplicatingUnitScrape
         # Find articles
         while True:
             start = datetime.datetime.now()
-            while datetime.datetime.now() - start < datetime.timedelta(seconds=30):
-                ajax_mask = self.wait("#article_ajax_mask", visible=False)
-                if not ajax_mask.is_displayed():
-                    time.sleep(1)
-                    break
+            print(start)
+            #while datetime.datetime.now() - start < datetime.timedelta(seconds=30):
+             #   ajax_mask = self.wait("#article_ajax_mask", visible=False)
+              #  if not ajax_mask.is_displayed():
+               #     time.sleep(1)
+                #    break
 
             time.sleep(5)
 
             # Yield articles
-            articles = self.browser.find_elements_by_css_selector("#article-results-list > div")
+            articles = self.browser.find_elements_by_css_selector(".nd-article-list > article")
+           # print(f"dit is articlelist{articles}")
             article_units = list(map(self.scrape_unit_meta, articles))
+            print(f"units{article_units}")
 
             # If first and last article were already in db, we're done
             first_article_cached = self.is_cached(article_units[0])
@@ -155,21 +162,29 @@ class NewsdeskScraper(SeleniumLoginMixin, SeleniumMixin, DeduplicatingUnitScrape
         return unit.article.url, unit.article.date
 
     def scrape_unit_meta(self, article_element):
+        CONTEXT['unit'] = article_element
+
         article_html = article_element.get_attribute("outerHTML")
+        print(f"dit is html{article_html}")
         article_doc = lxml.html.fromstring(article_html, base_url=SEARCH_URL)
+        CONTEXT['doc'] = article_element
 
         def get_byline_prop(prop):
-            for meta_element in article_doc.cssselect(".article_byline__element.{}".format(prop)):
+            for meta_element in article_doc.cssselect(f".nd-article__{prop}"):
+                print(meta_element)
                 prop_value = meta_element.text_content().strip()
+                print(prop_value)
                 if prop_value:
                     return prop_value
             else:
                 raise ValueError("Article {} has no property '{}'.".format(title, prop))
 
-        text_url = article_doc.cssselect("a.article_headline")[0].get("href")
+        text_url = article_doc.cssselect("a.nd-article__headline-text")[0].get("href")
+        print(text_url)
         url = "newsdesk://{}".format(get_newsdesk_article_id(text_url))
+        print(url)
 
-        title = article_doc.cssselect("a.article_headline")[0].text_content().strip()
+        title = article_doc.cssselect("a.nd-article__headline-text")[0].text_content().strip()
         publisher = get_byline_prop("source")
 
         date = get_byline_prop("harvest_date")

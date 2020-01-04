@@ -73,6 +73,9 @@ class NRCScraper(LoginMixin, UnitScraper, DateRangeScraper):
             if r.status_code == 500:
                 logging.warning("HTTP 500, was there news on {date}?")
                 continue
+            if r.status_code == 404:
+                logging.warning("HTTP 404, was there news on {date}?")
+                continue
             r.raise_for_status()
             data = r.json()
             units = {}
@@ -144,7 +147,7 @@ class NRCScraper(LoginMixin, UnitScraper, DateRangeScraper):
             author2 = author[0].text_content()
         text = doc.cssselect("div.article__content")
         if not text:
-            raise Exception(f"no text for article {unit}")
+            text = doc.cssselect("div.article__header-and-content")
         text2 = text[0].text_content()
         text2 = re.sub(r"\s*\n\s*", "\n\n", text2).strip()
         text2 = re.sub(r"[ \t]+", " ", text2).strip()

@@ -45,9 +45,13 @@ class NuScraper(DeduplicatingUnitScraper):
 
     def get_article_section_text(self, url):
         article_doc = self.session.get_html(url)
+        print(url)
 
-        yield article_doc.cssselect(".breadcrumb li.active")[0].text_content().strip()
-        text = html2text(article_doc.cssselect(".article.body")[0]).strip()
+        yield article_doc.cssselect("#main")[0].text_content().strip()
+        #yield article_doc.cssselect(".breadcrumb li.active")[0].text_content().strip()
+        #text = html2text(article_doc.cssselect(".article.body")[0]).strip()
+        text = html2text(article_doc.cssselect("div.block.article-body")[0]).strip()
+        print(f"{text}")
 
         # Bylines are sometimes included in the main body text. We won't put in
         # any effort to pluck out those cases though..
@@ -68,9 +72,9 @@ class NuScraper(DeduplicatingUnitScraper):
 
     def scrape_unit(self, entry):
         article = Article()
-
         try:
             section, text = self.get_article_section_text(entry["link"])
+            print(section,text)
         except IndexError:
             return None
 

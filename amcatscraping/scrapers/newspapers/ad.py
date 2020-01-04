@@ -60,6 +60,7 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedupli
     login_username_field = "#username"
     login_password_field = "#password"
     login_error_selector = ".message.message--error"
+    logout = "paper-button#logout"
     allow_missing_login = True
 
     def click(self, element):
@@ -69,8 +70,14 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedupli
             self.click(element.find_element_by_xpath(".."))
 
     def login(self, username, password):
-        self.browser.get(self.login_url)
+        time.sleep(3)
+        try:
+            self.wait(self.login_username_field)
+        except NoSuchElementException:
+            if self.logout:
+                return True
         self.accept_cookie()
+        print("login")
         return super(EPagesScraper, self).login(username, password)
 
     def accept_cookie(self, timeout=3):
@@ -80,9 +87,11 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedupli
             pass  # no cookies, no problem
 
     def get_url_and_date_from_unit(self, unit: EPagesUnit) -> Tuple[str, datetime.date]:
+        print(unit.url, unit.date)
         return unit.url, unit.date
 
     def get_deduplicate_key_from_article(self, article: Article) -> str:
+        print(f"article {article.url}")
         return article.url
 
     def get_deduplicate_key_from_unit(self, unit: EPagesUnit) -> str:
