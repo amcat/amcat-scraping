@@ -263,7 +263,7 @@ class UnitScraper(Scraper):
             if self.deduplicate_on_url:
                 try:
                     url, date = self.get_url_and_date_from_unit(unit)
-                    print(f"url={url} and date = {date}")
+                #    print(f"url={url} and date = {date}")
                 except NotImplementedError:
                     pass
                 else:
@@ -274,7 +274,7 @@ class UnitScraper(Scraper):
 
             article = self.scrape_unit(unit)
             if article is not None:
-                print(f"article={article}")
+             #   print(f"article={article}")
                 yield article
 
     def get_url_and_date_from_unit(self, unit: Any) -> Tuple[str, datetime.date]:

@@ -70,14 +70,15 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedupli
             self.click(element.find_element_by_xpath(".."))
 
     def login(self, username, password):
-        time.sleep(3)
+        self.browser.get(self.login_url)
+        time.sleep(1)
         try:
             self.wait(self.login_username_field)
         except NoSuchElementException:
-            if self.logout:
+            if self.allow_missing_login:
                 return True
+            raise
         self.accept_cookie()
-        print("login")
         return super(EPagesScraper, self).login(username, password)
 
     def accept_cookie(self, timeout=3):
