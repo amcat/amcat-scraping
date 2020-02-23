@@ -116,7 +116,8 @@ class NewsdeskScraper(SeleniumLoginMixin, SeleniumMixin, DeduplicatingUnitScrape
 
         # Set 'search in last 24 hours'
         self.wait(".search-filter-date__trigger").click()
-        self.wait('//span[text() = "{}"]'.format("3 dagen"), by=By.XPATH).click()
+        self.wait('//span[text() = "{}"]'.format("30 dagen"), by=By.XPATH).click()
+        self.wait('//span[text() = "{}"]'.format("30 dagen"), by=By.XPATH).click()
 
         # Search!
         self.wait(".rich-search-box__content").click()
@@ -242,7 +243,7 @@ class NewsdeskScraper(SeleniumLoginMixin, SeleniumMixin, DeduplicatingUnitScrape
                     break
                 if i > 100:
                     raise Exception("Giving up waiting for the handle...")
-                time.sleep(0.5)
+                time.sleep(1.5)
             new_handle, = set(driver.window_handles) - set(existing_handles)
             print(f"Got handle: {new_handle}")
             driver.switch_to_window(new_handle)
