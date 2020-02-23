@@ -62,6 +62,7 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedupli
     login_error_selector = ".message.message--error"
     logout = "paper-button#logout"
     allow_missing_login = True
+    BROWSER=None
 
     def click(self, element):
         try:
@@ -70,6 +71,7 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedupli
             self.click(element.find_element_by_xpath(".."))
 
     def login(self, username, password):
+        EPagesScraper.BROWSER = self.browser
         self.browser.get(self.login_url)
         time.sleep(1)
         try:
