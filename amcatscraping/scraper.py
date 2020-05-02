@@ -132,7 +132,13 @@ class Scraper(object):
     def _save(self, articles: List[Article]) -> Iterable[Article]:
         json_data = [article_to_json(a) for a in articles]
         json_data = json.dumps(json_data, cls=PropertyMappingJSONEncoder, indent=2)
-        new_articles = self.api.create_articles(self.project_id, self.articleset_id, json_data)
+        for i in range(3):
+            try:
+                new_articles = self.api.create_articles(self.project_id, self.articleset_id, json_data)
+            except APIError:
+                logging.exception(f'[(i)/3] Error on uploading, {"giving up" if i==3 else "retrying"}')
+            else:
+                break
         for article, article_dict in zip(articles, new_articles):
             article.id = article_dict["id"]
             yield article

@@ -30,6 +30,8 @@ setup(
         "docopt",
         "lxml",
         "tabulate",
-        "feedparser", 'redis', 'dateparser', 'iso8601'
+        "feedparser", 'redis', 'dateparser', 'iso8601',
+        "selenium",
+        # as long as amcat dependency exists, also pip install -r amcat/requirements.txt
     ],
 )
