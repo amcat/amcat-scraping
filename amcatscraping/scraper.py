@@ -182,14 +182,15 @@ class Scraper(object):
         if self.no_api:
             return set()
 
-        return set(map(itemgetter("url"), self.api.list_articles(
+        urls = {a["url"] for a in self.api.get_articles(
             project=self.project_id,
             articleset=self.articleset_id,
             on_date=date.isoformat(),
-            minimal=1,
-            col=["url"],
+            columns=["url"],
             page_size=9999
-        )))
+        )}
+        logging.info(f"AmCAT contained {len(urls)} unique urls on that date")
+        return urls
 
     def deduplicate(self, articles: Iterable[Article]) -> Iterable[Article]:
         """Given a number of articles, return those not yet present in db based on a set of
