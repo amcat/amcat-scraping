@@ -68,6 +68,7 @@ class NRCScraper(LoginMixin, UnitScraper, DateRangeScraper):
             if date.weekday() == 6: # sunday
                 continue
             data_url = f"https://www.nrc.nl/de/data/NH/{date.year}/{date.month}/{date.day}/"
+            print(data_url)
             logging.warning(f"Scraping {data_url}")
             r = self.session.get(data_url)
             if r.status_code == 500:
@@ -86,18 +87,22 @@ class NRCScraper(LoginMixin, UnitScraper, DateRangeScraper):
                     if box['url'].startswith("https://images.nrc.nl/"):
                         logging.warning(f"Skipping image url {box['url']}")
                         continue
+                    doc_id = box['document_id']
+                    if doc_id == 0:
+                        # usually these are ads, but sometimes not... but seem to have no text (?)
+                        logging.warning(f"Skipping doc_id zero on page {page['number']} book {page['book']} index {page['index']}")
+                        continue
                     #if not box['url'].startswith("/nieuws/"):
                      #   raise Exception(f"Unexpected url: {box['url']}")
-                    doc_id = box['document_id']
                     if doc_id not in units:
                         url = parse.urljoin("https://www.nrc.nl", box['url'])
                         units[doc_id] = NRCUnit(doc_id, url, date, set(), set(),
                                                 box['clipping_image_url'], box['clipping_pdf_url'])
                     u = units[doc_id]
                     if box['clipping_image_url'] != u.image:
-                        raise Exception(f"{u.url}: u.image {u.image} != box.image {box['clipping_image_url']}")
+                        raise Exception(f"doc_id = {doc_id} {u.url}: u.image {u.image} != box.image {box['clipping_image_url']}")
                     if box['clipping_pdf_url'] != u.pdf:
-                        raise Exception(f"{u.url}: u.pdf {u.pdf} != box.pdf {box['clipping_pdf_url']}")
+                        raise Exception(f"doc_id = {doc_id} (pages {u.pages}) {u.url}: u.pdf {u.pdf} != box.pdf {box['clipping_pdf_url']}")
                     u.pages.add(page['number'] if page['book'] == 1 else int(page['index']))
                     for section in page['sections']:
                         u.sections.add(section)
