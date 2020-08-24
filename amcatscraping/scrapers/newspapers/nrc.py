@@ -156,18 +156,19 @@ class NRCScraper(LoginMixin, UnitScraper, DateRangeScraper):
         else:
             text3 = f"{text2}"
 
-        article = Article(date=unit.date,
-                          online_date=online_date,
-                          title=headline2,
-                          text=text3,
-                          url=unit.url,
-                          image_url=unit.image,
-                          pdf_url=unit.pdf,
-                          page_tag=unit.pages,
-                          section_tag=unit.sections,
-                          raw_html=html,
-                          author=author2)
-        return article
+        article = dict(date=unit.date,
+                       online_date=online_date,
+                       title=headline2,
+                       text=text3,
+                       url=unit.url,
+                       pdf_url=unit.pdf,
+                       page_tag=unit.pages,
+                       section_tag=unit.sections,
+                       raw_html=html,
+                       author=author2)
+        if unit.image is not None:
+            article["image_url"] = unit.image
+        return Article(**article)
 
 
 if __name__ == '__main__':
