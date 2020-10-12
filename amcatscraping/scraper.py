@@ -638,6 +638,7 @@ class SeleniumLoginMixin(LoginMixin):
     def login(self, username, password):
         self.browser.get(self.login_url)
         self.wait(self.login_username_field).send_keys(username)
+        self.wait(self.login_username_field).send_keys(Keys.ENTER)
         self.wait(self.login_password_field).send_keys(password)
         self.wait(self.login_password_field).send_keys(Keys.ENTER)
 
