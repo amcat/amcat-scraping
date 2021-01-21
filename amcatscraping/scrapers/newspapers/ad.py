@@ -81,13 +81,24 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedupli
                 return True
             raise
         self.accept_cookie()
-        return super(EPagesScraper, self).login(username, password)
+        success = super(EPagesScraper, self).login(username, password)
+        if success:
+            self.accept_cookie2()
+        return success
 
     def accept_cookie(self, timeout=3):
         try:
+            logging.info("Waiting for cookie screen")
             self.wait(self.cookies_ok_button, timeout=3).click()
         except (NoSuchElementException, NotVisible):
-            pass  # no cookies, no problem
+            logging.info("No cookie screen found, hope it's OK")
+
+    def accept_cookie2(self, timeout=3):
+        try:
+            logging.info("Waiting for second consent screen")
+            self.wait("paper-button.paper_green").click()
+        except (NoSuchElementException, NotVisible):
+            logging.info("Second  consent screen not found, hope it's OK!")
 
     def get_url_and_date_from_unit(self, unit: EPagesUnit) -> Tuple[str, datetime.date]:
         print(unit.url, unit.date)

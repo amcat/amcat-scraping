@@ -144,6 +144,11 @@ def run_single(config, args, scraper_config, scraper_class):
         if opt in raw_opts:
             del raw_opts[opt]
 
+    # feitelijk gebeurt onderstaande, maar dan flexibel voor scraper en update
+    #if scraper_name == "VK" and not arts["--update"]:
+    #    scraper = VolksrkantScraper(config...)
+    #    return list(scraper.run())
+
     opts["options"] = raw_opts
     scraper = scraper_class(**opts)
     method = "run_update" if args["--update"] else "run"
