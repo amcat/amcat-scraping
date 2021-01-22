@@ -93,7 +93,7 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedupli
         except (NoSuchElementException, NotVisible):
             logging.info("No cookie screen found, hope it's OK")
 
-    def accept_cookie2(self, timeout=3):
+    def accept_cookie2(self, timeout=5):
         try:
             logging.info("Waiting for second consent screen")
             self.wait("paper-button.paper_green").click()
@@ -119,6 +119,8 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedupli
         self.browser.get(self.login_url)
         if edition is not None:
             self.click(self.wait('//div[text() = "{}"]'.format(edition), by=By.XPATH))
+        # accept cookies
+            self.accept_cookie2()
 
         # Go to archive and select paper of this date
         self.wait("paper-button.showMoreButton").click()
