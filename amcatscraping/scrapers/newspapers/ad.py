@@ -134,7 +134,8 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedupli
 
         # find correct year
         while True:
-            picked_year = int(self.wait('#yearSelection > div > div.vl-date-picker').text)
+            picked_year = int(self.wait("#yearSelection > paper-slider").get_attribute("value"))
+            #picked_year = int(self.wait('input.style-scope.vl-date-picker').text)
             if picked_year == date.year:
                 break
             year_buttons = self.browser.find_elements_by_css_selector("#yearSelection iron-icon")
