@@ -184,14 +184,14 @@ class CoostoScraper(LoginMixin, DeduplicatingUnitScraper):
             # Set filter media
             self.wait('#qform button.settings').click()
             #for medium in MEDIUMS:
-            self.wait('//form[@id="qform"]//label[text() = "{}"]'.format(self.medium), by=By.XPATH).click()
+           # self.wait('//form[@id="qform"]//label[text() = "{}"]'.format(self.medium), by=By.XPATH).click()
 
             # Select 'only posts'
-            self.wait(".query_advanced > div:nth-child(2) > p:nth-child(2) > label:nth-child(2)").click()
+            #self.wait(".query_advanced > div:nth-child(1) > p:nth-child(1) > label:nth-child(1)").click()
 
-            # Set post to 'last 30 days'
+            # Set post to 'last 24h'
             self.wait('#qform button.datepicker').click()
-            self.wait('#qform .date_presets > li[data-preset="24h"]').click()
+            self.wait('#qform .date_presets > li[data-preset="7d"]').click()
 
             prev_time = datetime.datetime.now() - datetime.timedelta(minutes=30)
 

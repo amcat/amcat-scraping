@@ -74,6 +74,7 @@ LOG_DIR = os.path.expanduser("~/.cache/scraperlogs/")
 TODAY = datetime.date.today()
 
 SECTIONS = {"*", "store", "mail", "logging"}
+_SCRAPER = None
 
 ScraperResult = collections.namedtuple("ScraperResult", ["name", "narticles", "failed", "log"])
 
@@ -150,8 +151,12 @@ def run_single(config, args, scraper_config, scraper_class):
     #    return list(scraper.run())
 
     opts["options"] = raw_opts
+    print(opts)
     scraper = scraper_class(**opts)
     method = "run_update" if args["--update"] else "run"
+    # allow debug access to scraper object
+    global _SCRAPER
+    _SCRAPER = scraper
 
     try:
         return list(getattr(scraper, method)()), False
