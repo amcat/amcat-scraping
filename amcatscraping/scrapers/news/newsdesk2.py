@@ -126,8 +126,12 @@ def extract_date(art):
     datestr = dates[3].text
     return dutch_strptime(datestr, "%d %b %Y").isoformat()
 
+CURRENT_ARTICLE = None
+
 def scrape_article(art, medium):
     """Scrape a single nexis article. Art should be a references to the result list LI element"""
+    global CURRENT_ARTICLE
+    CURRENT_ARTICLE = art
     result = {}
     result['publisher'] = medium
     result['title'] = art.find_element_by_css_selector("h2.doc-title.translate").text
@@ -212,9 +216,8 @@ def scrape_nexis(driver, medium, from_date, to_date, query):
 
     set_result_sort(driver, direction='datedescending')
 
-
     while True:
-        article_list = waits(driver, 'ol.nexisuni-result-list li')
+        article_list = waits(driver, 'ol.nexisuni-result-list li:not(.breadcrumb-list)')
         yield [scrape_article(art, medium) for art in article_list]
         next = driver.find_elements_by_css_selector("nav.pagination li")[-1]
         if next.get_attribute("class") == "disabled":
