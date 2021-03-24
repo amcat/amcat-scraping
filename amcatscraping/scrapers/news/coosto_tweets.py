@@ -172,10 +172,6 @@ class CoostoScraper(LoginMixin, DeduplicatingUnitScraper):
             # Close (potential) changelog
             webdriver.ActionChains(self.browser).send_keys(Keys.ESCAPE).perform()
 
-            # Close all tabs
-            #self.wait(".tab_removeall").click()
-
-            #Select Listen
 
 
             #self.wait('a[href="/querycenter/?pid=23291"]').click()
@@ -228,9 +224,9 @@ class CoostoScraper(LoginMixin, DeduplicatingUnitScraper):
                     yield from init
                     self.set_flush_flag()
                     yield last
-
-
         finally:
+            # Close all tabs
+            self.wait(".tab_removeall").click()
             shutil.rmtree(self.tmp_dir)
             #self.browser.quit()
 
