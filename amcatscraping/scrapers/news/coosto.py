@@ -1,21 +1,3 @@
-###########################################################################
-#          (C) Vrije Universiteit, Amsterdam (the Netherlands)            #
-#                                                                         #
-# This file is part of AmCAT - The Amsterdam Content Analysis Toolkit     #
-#                                                                         #
-# AmCAT is free software: you can redistribute it and/or modify it under  #
-# the terms of the GNU Lesser General Public License as published by the  #
-# Free Software Foundation, either version 3 of the License, or (at your  #
-# option) any later version.                                              #
-#                                                                         #
-# AmCAT is distributed in the hope that it will be useful, but WITHOUT    #
-# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or   #
-# FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public     #
-# License for more details.                                               #
-#                                                                         #
-# You should have received a copy of the GNU Lesser General Public        #
-# License along with AmCAT.  If not, see <http://www.gnu.org/licenses/>.  #
-###########################################################################
 import urllib.parse
 
 import tempfile
@@ -45,7 +27,7 @@ from selenium.webdriver.common.keys import Keys
 from amcat.models import Article
 from amcatscraping.scraper import DeduplicatingUnitScraper, LoginMixin
 from amcatscraping.tools import parse_form, setup_logging
-from online_scrapers import all_scrapers
+from dutch_news_scrapers import all_scrapers
 
 log = logging.getLogger(__name__)
 
@@ -270,7 +252,6 @@ class CoostoScraper(LoginMixin, DeduplicatingUnitScraper):
                 # Make sure we commit ALL articles
                 try:
                     (*init, last) = self._get_coosto_units()
-                    print("HELLO")
                 except ValueError:
                     # API returned no new articles..?
                     pass
@@ -293,7 +274,11 @@ class CoostoScraper(LoginMixin, DeduplicatingUnitScraper):
         hostname = urlparse(unit["url"]).hostname
         publisher = ".".join(hostname.split(".")[-2:])
         title = unit["titel"].strip() or"[No title]"
+        if "advertorial" in unit['url']:
+            return
         text = self.get_text(unit['url'])
+        if text is None:
+            raise Exception(f"Text is None for {unit['url']} (title: {title})")
         article = Article(title=title, text=text, url=unit["url"], date=date)
         article.set_property("author", unit["auteur"])
         article.set_property("publisher", publisher)
