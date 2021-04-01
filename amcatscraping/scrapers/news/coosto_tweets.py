@@ -247,7 +247,6 @@ class CoostoScraper(LoginMixin, DeduplicatingUnitScraper):
         article = Article(title=title, text=text, url=unit["url"], date=date)
         article.set_property("author", unit["auteur"])
         article.set_property("publisher", publisher)
-        print(article)
         return article
     
 if __name__ == "__main__":
