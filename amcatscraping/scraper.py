@@ -45,6 +45,8 @@ from .tools import to_date, memoize, open_json_cache
 from amcatclient.amcatclient import AmcatAPI, APIError
 from amcat.models import Article
 
+from random import randint
+from time import sleep
 
 log = logging.getLogger(__name__)
 
@@ -60,6 +62,10 @@ def to_trees(children: Iterable[Union[Article, "ArticleTree"]]) -> Iterable["Art
             yield ArticleTree(child, [])
         else:
             yield child
+
+
+class SkipArticle(Exception):
+    pass
 
 
 class ArticleTree:
@@ -110,11 +116,13 @@ class Scraper(object):
         else:
             self.api = self._api_auth()
 
-        self.session = Session()
-        self.setup_session()
         self.deduplicate_on_url = deduplicate_on_url
         self.duplicate_count = 0
         self.flush_flag = False
+        self.session = Session()
+
+    def initialize(self):
+        self.setup_session()
 
     def _api_auth(self) -> AmcatAPI:
         return AmcatAPI(self.api_host, self.api_user, self.api_password)
@@ -224,7 +232,7 @@ class Scraper(object):
             yield from self.process_tree(child, parent_hash=article.hash)
 
     def _run(self) -> Iterable[Article]:
-        log.info("Running scraper {self.__class__.__name__} (batch size: {self.batch_size})".format(**locals()))
+        log.info("Running SCRAPER {self.__class__.__name__} (batch size: {self.batch_size})".format(**locals()))
 
         save_queue = []
         for article_tree in self.scrape():
@@ -271,7 +279,6 @@ class UnitScraper(Scraper):
             if self.deduplicate_on_url:
                 try:
                     url, date = self.get_url_and_date_from_unit(unit)
-                #    print(f"url={url} and date = {date}")
                 except NotImplementedError:
                     pass
                 else:
@@ -280,10 +287,10 @@ class UnitScraper(Scraper):
                         self.duplicate_count += 1
                         continue
 
-            article = self.scrape_unit(unit)
-            if article is not None:
-             #   print(f"article={article}")
-                yield article
+            try:
+                yield self.scrape_unit(unit)
+            except SkipArticle as e:
+                logging.warning(f"Skipping article {unit}: {e}")
 
     def get_url_and_date_from_unit(self, unit: Any) -> Tuple[str, datetime.date]:
         raise NotImplementedError("Subclasses should implement get_url_and_date_from_unit()")
@@ -572,6 +579,7 @@ class SeleniumMixin(object):
         atexit.register(quit_browser, self.browser)
 
         super(SeleniumMixin, self).setup_session()
+
 
     def wait(self, selector, timeout=60, visible=True, by=By.CSS_SELECTOR, on=None) -> WebElement:
         """
