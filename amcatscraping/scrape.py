@@ -145,19 +145,14 @@ def run_single(config, args, scraper_config, scraper_class):
         if opt in raw_opts:
             del raw_opts[opt]
 
-    # feitelijk gebeurt onderstaande, maar dan flexibel voor scraper en update
-    #if scraper_name == "VK" and not arts["--update"]:
-    #    scraper = VolksrkantScraper(config...)
-    #    return list(scraper.run())
-
     opts["options"] = raw_opts
-    print(opts)
     scraper = scraper_class(**opts)
     method = "run_update" if args["--update"] else "run"
     # allow debug access to scraper object
     global _SCRAPER
     _SCRAPER = scraper
 
+    scraper.initialize()
     try:
         return list(getattr(scraper, method)()), False
     except NotImplementedError:
@@ -342,13 +337,10 @@ def main(config, args):
     logging.basicConfig(format='[%(asctime)s %(levelname)8s] %(message)s', level=loglevel)
     if args["list"]:
         return list_scrapers(config)
-
     if args["run"]:
         return run(config, args, args["<scraper>"])
-
     if args["report"]:
         return report(config, args)
-
     if args["log"]:
         return _log(config, args)
 
