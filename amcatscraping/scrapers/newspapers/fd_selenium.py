@@ -83,10 +83,12 @@ class FDScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Deduplicati
 
     def login(self, username, password):
         self.browser.get(self.login_url)
-        iframe = self.wait("#gdpr-consent-notice")
+        time.sleep(3)
+        iframe = self.wait("#gdpr-consent-notice", timeout=5)
         self.browser.switch_to.frame(iframe)
         self.browser.find_element_by_css_selector("button#save").send_keys(Keys.ENTER)
         self.browser.switch_to.default_content()
+        time.sleep(2)
         self.wait("button.profile-button.menu-button").click()
         self.wait("a.fd-button.m").click()
         self.wait(self.login_username_field).send_keys(username)
@@ -110,6 +112,11 @@ class FDScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Deduplicati
         KRANT_URL = parse.urljoin(BASE_URL, f"krant/{date.year}/{date.month}/{date.day}")
         print(f"KRANT IS {KRANT_URL}")
         self.browser.get(KRANT_URL)
+        time.sleep(2)
+        if self.browser.current_url != KRANT_URL:
+            logging.warning(f"Redirected from {KRANT_URL} to {self.browser.current_url}, probably no paper today, skipping")
+            return []
+
         units = []
         for page in self.browser.find_elements_by_css_selector("section.page"):
             pagenr = int(page.get_attribute("id").replace("page-", ""))
@@ -133,7 +140,6 @@ class FDScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Deduplicati
     def scrape_unit(self, unit: FDUnit) -> Article:
         print(f"article is {unit}")
         sleep(randint(1,10))
-      #  unit=FDUnit(url='https://fd.nl/HFD_20211108_0_001_038',date=datetime.date(2021,3,7), page=1)
         self.browser.get(unit.url)
         try:
             title = self.wait("h1.heading")

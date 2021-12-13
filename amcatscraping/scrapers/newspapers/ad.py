@@ -17,6 +17,7 @@
 # License along with AmCAT.  If not, see <http://www.gnu.org/licenses/>.  #
 ###########################################################################
 import logging
+import re
 import time
 import datetime
 import locale
@@ -25,8 +26,7 @@ from urllib.parse import urljoin
 
 from collections import namedtuple
 from typing import Tuple
-
-from selenium.common.exceptions import ElementClickInterceptedException, NoSuchElementException
+from selenium.common.exceptions import ElementClickInterceptedException, NoSuchElementException, ElementNotVisibleException
 from selenium.webdriver.common.by import By
 
 from amcat.models import Article
@@ -93,11 +93,21 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedupli
         except (NoSuchElementException, NotVisible):
             logging.info("No cookie screen found, hope it's OK")
 
+    def wait_shadow(self, *args, **kargs):
+        stop = time.time() + 10
+        while time.time() < stop:
+            try:
+                return self.shadow.find_element(*args, **kargs)
+            except (NoSuchElementException, ElementNotVisibleException):
+                time.sleep(1)
+        return self.shadow.find_element(*args, **kargs)
+
     def accept_cookie2(self, timeout=5):
         try:
+            time.sleep(1)
             logging.info("Waiting for second consent screen")
-            self.wait("paper-button.paper_green").click()
-        except (NoSuchElementException, NotVisible):
+            self.shadow.find_element("#allowoptions > div > paper-button.paper_green").click()
+        except (NoSuchElementException, NotVisible, ElementNotVisibleException):
             logging.info("Second  consent screen not found, hope it's OK!")
 
     def get_url_and_date_from_unit(self, unit: EPagesUnit) -> Tuple[str, datetime.date]:
@@ -118,64 +128,63 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedupli
 
         self.browser.get(self.login_url)
         if edition is not None:
-            self.click(self.wait('//div[text() = "{}"]'.format(edition), by=By.XPATH))
+            print(f"edition is {edition}")
+            regions = self.shadow.find_elements("#regionsContainer > paper-button.regionItem")
+            for region in regions:
+                if region.text == "ALGEMEEN DAGBLAD":
+                    region.click()
+            #self.click(self.wait('//div[text() = "{}"]'.format(edition), by=By.XPATH))
         # accept cookies
             self.accept_cookie2()
 
         # Go to archive and select paper of this date
-        self.wait("paper-button.showMoreButton").click()
+        self.wait_shadow("paper-button.showMoreButton").click()
 
         # make sure right header is not hidden
-        header = self.wait('#rightHeader', visible=False)
+        header = self.wait_shadow('#rightHeader')
         self.browser.execute_script('arguments[0].removeAttribute("hidden");', header)
 
         # click "Archief" button
-        self.wait('archive-calendar-button').click()
+        self.wait_shadow('archive-calendar-button').click()
 
         # find correct year
         while True:
-            picked_year = int(self.wait("#yearSelection > paper-slider").get_attribute("value"))
-            #picked_year = int(self.wait('input.style-scope.vl-date-picker').text)
+            picked_year = self.wait_shadow("date-picker-button").get_attribute("navdate")
+            m = re.match(r"\w+ \w+ \d+ (\d{4})", picked_year)
+            if not m:
+                raise Exception(f"Could not parse date {picked_year}")
+            picked_year = int(m.group(1))
             if picked_year == date.year:
                 break
-            year_buttons = self.browser.find_elements_by_css_selector("#yearSelection iron-icon")
-            if picked_year > date.year:
-                year_buttons[0].click()
-            elif len(year_buttons) > 1:
-                year_buttons[1].click()
-            else:
-                raise Exception(f"Only one year button, but {picked_year} < {date.year}")
+            year_button = self.wait_shadow("button#buttonleft")
+            year_button.click()
 
         # find correct month
-        self.wait("#monthSelection").find_element_by_xpath(f"//paper-button[@data-month={date.month-1}]").click()
-        # find correct day -- wait 3 seconds to give date picker time to load
-        time.sleep(3)
-        day_button = self.wait("#daySelection").find_element_by_xpath(f"//paper-button[@data-current and @data-day={date.day}]")
-        logging.info(f'{date}: aria-disabled: {day_button.get_attribute("aria-disabled")}, active: {day_button.get_attribute("active")}')
-        if day_button.get_attribute("aria-disabled") == "true":
+        self.shadow.find_element("div.year_month").find_element_by_xpath(f"//button[@value={date.month}]").click()
+#        time.sleep(3)
+        day_button = self.shadow.find_element("div.datepicker-body").find_element_by_xpath(f".//button[@value={date.day}]")
+        logging.info(f'{date}')
+        if "disabled" in day_button.get_attribute("class"):
             logging.warning(f"No newspaper for {date}, Sunday?")
             return
-        if day_button.get_attribute("active") == "false":
-            # Don't click if correct day was already selected
-            day_button.click()
-        self.wait("#selectButton").click()
+        day_button.click()
+        self.shadow.find_element("#chooseButton").click()
 
-        for archive_issue in self.browser.find_elements_by_css_selector("archive-issue"):
-            try:
-                archive_date = archive_issue.find_element_by_css_selector(".issueDate").text.strip()
-            except NoSuchElementException:
-                continue
+        pages = self.wait_shadow('div#currentPage')
+        archive_issues = pages.find_elements_by_css_selector("archive-issue")
+        for archive_issue in archive_issues:
+            archive_date = archive_issue.get_attribute("data-date")
             if not archive_date:
                 continue
-            if dutch_strptime(archive_date, "%d %B %Y").date() == date:
+            if dutch_strptime(archive_date, "%Y-%m-%d").date() == date:
                 archive_issue.click()
                 break
         else:
-            logging.warning(f"Could not find date {date}")
-            return
+           logging.warning(f"Could not find date {date}")
+           return
 
         # Scrape unit
-        self.browser.switch_to_frame(self.wait("iframe#issue"))
+        self.browser.switch_to.frame(self.shadow.find_element('iframe#issue'))
 
         seconds_forgone = 0
         start = datetime.datetime.now()
@@ -183,19 +192,18 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedupli
             seconds_forgone = (datetime.datetime.now() - start).total_seconds()
 
             try:
-                self.wait("#articleMenuItem", timeout=10).click()
+                self.wait_shadow("#articleMenuItem").click()
             except ElementClickInterceptedException:
                 pass
             else:
                 break
 
-        article_list_buttons = self.browser.find_elements_by_css_selector("#articleListSectionsButtons > button")
+        article_list_buttons = self.shadow.find_elements("#articleListSectionsButtons > button")
         article_list_buttons = list(article_list_buttons) or [lambda: None]
-
         for article_list_button in article_list_buttons:
             if not "selected" in article_list_button.get_attribute("class"):
                 article_list_button.click()
-            articles = list(self.browser.find_elements_by_css_selector(".articleListItem"))
+            articles = list(self.shadow.find_elements(".articleListItem"))
             for article in articles:
                 page = int(article.get_attribute("data-page"))
                 refid = article.get_attribute("data-refid")
