@@ -36,6 +36,7 @@ from selenium import webdriver
 from selenium.common.exceptions import NoSuchElementException, StaleElementReferenceException
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.by import By
+from pyshadow.main import Shadow
 
 from amcat.models import PropertyMappingJSONEncoder
 from selenium.webdriver.remote.webelement import WebElement
@@ -576,6 +577,8 @@ class SeleniumMixin(object):
             fp.set_preference(k, v)
 
         self.browser = webdriver.Firefox(firefox_profile=fp)
+        self.shadow = Shadow(self.browser)
+        self.shadow.set_implicit_wait(10)
         atexit.register(quit_browser, self.browser)
 
         super(SeleniumMixin, self).setup_session()
