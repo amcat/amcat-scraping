@@ -65,8 +65,9 @@ def dutch_strptime(date, pattern):
     finally:
         locale.setlocale(locale.LC_ALL, loc)
 
+
 class FDScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, DeduplicatingUnitScraper):
-    publisher = "Financieele Dagblad"
+    publisher = "Het Financieele Dagblad"
     cookies_ok_button = "button#save"
     editions = None
     login_url = "https://fd.nl/krant"
