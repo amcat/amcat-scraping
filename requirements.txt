@@ -2,3 +2,4 @@ readability-lxml
 tabulate
 docopt
 feedparser
+dutch_news_scrapers
