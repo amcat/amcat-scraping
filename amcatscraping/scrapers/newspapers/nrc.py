@@ -31,7 +31,7 @@ from requests import HTTPError
 
 from amcat.models import Article
 from amcatscraping.tools import setup_logging, parse_form
-from amcatscraping.scraper import LoginMixin, UnitScraper, DateRangeScraper
+from amcatscraping.scraper import LoginMixin, UnitScraper, DateRangeScraper, SkipArticle
 from datetime import datetime
 
 OVERVIEW_URL = "https://login.nrc.nl/overview"
@@ -115,7 +115,7 @@ class NRCScraper(LoginMixin, UnitScraper, DateRangeScraper):
         m = re.match(r"https://www.nrc.nl/nieuws/(\d{4})/(\d{2})/(\d{2})/", unit.url)
         if not m:
             logging.warning(f"Invalid URL: {unit.url}")
-            return None
+            raise SkipArticle(f"Invalid URL: {unit.url}")
         year = int(m.group(1))
         month = int(m.group(2))
         day = int(m.group(3))
