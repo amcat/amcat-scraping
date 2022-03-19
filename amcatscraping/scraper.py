@@ -571,12 +571,15 @@ class NotVisible(Exception):
 
 
 class SeleniumMixin(object):
-    def setup_session(self):
+
+    def get_browser(self):
         fp = webdriver.FirefoxProfile()
         for k, v in self.get_browser_preferences():
             fp.set_preference(k, v)
+        return webdriver.Firefox(firefox_profile=fp)
 
-        self.browser = webdriver.Firefox(firefox_profile=fp)
+    def setup_session(self):
+        self.browser = self.get_browser()
         self.shadow = Shadow(self.browser)
         self.shadow.set_implicit_wait(10)
         atexit.register(quit_browser, self.browser)

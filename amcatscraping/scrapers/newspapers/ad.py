@@ -26,6 +26,8 @@ from urllib.parse import urljoin
 
 from collections import namedtuple
 from typing import Tuple
+from selenium import webdriver
+
 from selenium.common.exceptions import ElementClickInterceptedException, NoSuchElementException, ElementNotVisibleException
 from selenium.webdriver.common.by import By
 
@@ -63,6 +65,9 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedupli
     logout = "paper-button#logout"
     allow_missing_login = True
     BROWSER=None
+
+    def get_browser(self):
+        return webdriver.Chrome()
 
     def click(self, element):
         try:
