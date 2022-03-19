@@ -392,7 +392,7 @@ class BinarySearchScraper(Scraper):
     """Some websites don't have an archive which is easily orderable on date, but do have
     ascending thread or article ids. This scraper takes advantage of that fact by performing
     a binary search through these ids.
-    
+
     Descendants should implement the following methods:
 
       * get_latest()
@@ -400,7 +400,7 @@ class BinarySearchScraper(Scraper):
       * get_date(id)
 
     You should then be able to call get_first_of_date(date).
-    
+
     You should also make sure to call _dump_id_cache() after scraping to save the id cache
     to disk. This scraper caches its id results across subsequent runs."""
     cache_file = os.path.join(CACHE_DIR, "{self.__class__.__name__}_cache.json")
@@ -413,7 +413,7 @@ class BinarySearchScraper(Scraper):
         dates, ids = zip(*dict(self.id_cache).items()) or [[], []]
         dates = [d.date() for d in map(datetime.datetime.fromtimestamp, dates)]
         self.id_cache = dict(zip(dates, ids))
-        
+
         oldest_date, self.oldest_id = self.get_oldest()
         latest_date, self.latest_id = self.get_latest()
         self.id_cache[oldest_date] = self.oldest_id
@@ -586,6 +586,9 @@ class SeleniumMixin(object):
 
         super(SeleniumMixin, self).setup_session()
 
+    def browser_get(self, url):
+        self.browser.get(url)
+        self.browser.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
 
     def wait(self, selector, timeout=60, visible=True, by=By.CSS_SELECTOR, on=None) -> WebElement:
         """
@@ -638,7 +641,7 @@ class LoginMixin(object):
 
         if not self.login(self.username, self.password):
             raise ValueError("Login routine returned False. Are your credentials correct?")
-        
+
     def login(self, username, password):
         raise NotImplementedError("login() not implemented.")
 
@@ -650,7 +653,8 @@ class SeleniumLoginMixin(LoginMixin):
     login_error_selector = None
 
     def login(self, username, password):
-        self.browser.get(self.login_url)
+        self.browser_get(self.login_url)
+        time.sleep(1)
         self.wait(self.login_username_field).send_keys(username)
         self.wait(self.login_username_field).send_keys(Keys.ENTER)
         self.wait(self.login_password_field).send_keys(password)
@@ -665,4 +669,3 @@ class SeleniumLoginMixin(LoginMixin):
             return True
         else:
             return False
-

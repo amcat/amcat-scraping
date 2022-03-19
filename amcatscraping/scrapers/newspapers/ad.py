@@ -67,7 +67,17 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedupli
     BROWSER=None
 
     def get_browser(self):
-        return webdriver.Chrome()
+        options = webdriver.ChromeOptions()
+        options.add_argument("start-maximized")
+        options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        options.add_experimental_option('useAutomationExtension', False)
+        options.add_argument("--disable-blink-features")
+        options.add_argument("--disable-blink-features=AutomationControlled")
+
+        browser = webdriver.Chrome()
+        browser.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+        EPagesScraper.BROWSER = browser
+        return browser
 
     def click(self, element):
         try:
@@ -76,8 +86,7 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedupli
             self.click(element.find_element_by_xpath(".."))
 
     def login(self, username, password):
-        EPagesScraper.BROWSER = self.browser
-        self.browser.get(self.login_url)
+        self.browser_get(self.login_url)
         time.sleep(1)
         try:
             self.wait(self.login_username_field)
@@ -131,7 +140,7 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedupli
         logging.info(f"Selecting date {date}")
         self.accept_cookie(timeout=1)
 
-        self.browser.get(self.login_url)
+        self.browser_get(self.login_url)
         if edition is not None:
             print(f"edition is {edition}")
             regions = self.shadow.find_elements("#regionsContainer > paper-button.regionItem")
@@ -284,5 +293,3 @@ class AlgemeenDagbladScraper(EPagesScraper):
     publisher = "Algemeen Dagblad"
     login_url = "http://krant.ad.nl/"
     editions = ["Algemeen Dagblad"]
-
-
