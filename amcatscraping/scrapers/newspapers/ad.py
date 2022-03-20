@@ -106,10 +106,17 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedupli
         except (NoSuchElementException, NotVisible):
             logging.info("No cookie screen found, hope it's OK")
 
-
     def scroll_if_needed(self, element):
         if not element.is_displayed():
             self.browser.execute_script("arguments[0].scrollIntoView(true)", element)
+
+    def try_click(self, element):
+        self.scroll_if_needed(element)
+        try:
+            element.click()
+        except ElementClickInterceptedException:
+            self.browser.execute_script("arguments[0].scrollIntoView(true)", element)
+            element.click()
 
     def wait_shadow(self, *args, **kargs):
         stop = time.time() + 10
@@ -164,12 +171,11 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedupli
 
         # Go to archive and select paper of this date
         button = self.wait_shadow("paper-button.showMoreButton")
-        self.scroll_if_needed(button)
-        button.click()
+        self.try_click(button)
 
         # make sure right header is not hidden
         header = self.wait_shadow('#rightHeader')
-        self.browser.execute_script('arguments[0].removeAttribute("hidden");', header)
+        self.execute_script('arguments[0].removeAttribute("hidden");', header)
 
         self.choose_date(date)
         self.choose_paper(date)
