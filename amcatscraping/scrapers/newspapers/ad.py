@@ -128,9 +128,8 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedupli
 
     def accept_cookie2(self, timeout=5):
         try:
-            time.sleep(1)
             logging.info("Waiting for second consent screen")
-            self.shadow.find_element("#allowoptions > div > paper-button.paper_green").click()
+            self.wait_shadow_click("#allowoptions > div > paper-button.paper_green")
         except (NoSuchElementException, NotVisible, ElementNotVisibleException):
             logging.info("Second  consent screen not found, hope it's OK!")
 
