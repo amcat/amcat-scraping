@@ -32,8 +32,7 @@ from selenium.common.exceptions import ElementClickInterceptedException, NoSuchE
 from selenium.webdriver.common.by import By
 
 from amcat.models import Article
-from amcatscraping.scraper import SeleniumLoginMixin, SeleniumMixin, DeduplicatingUnitScraper, DateRangeScraper, \
-    NotVisible
+from amcatscraping.scraper import SeleniumLoginMixin, SeleniumMixin, DeduplicatingUnitScraper, DateRangeScraper, NotVisible
 from amcatscraping.tools import html2text
 
 EPagesUnit = namedtuple("EPagesUnit", ["url", "date", "title", "page", "screenshot", "text"])
@@ -107,6 +106,11 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedupli
         except (NoSuchElementException, NotVisible):
             logging.info("No cookie screen found, hope it's OK")
 
+
+    def scroll_if_needed(self, element):
+        if not element.is_displayed():
+            self.browser.execute_script("arguments[0].scrollIntoView(true)", element)
+
     def wait_shadow(self, *args, **kargs):
         stop = time.time() + 10
         while time.time() < stop:
@@ -159,7 +163,10 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedupli
             self.accept_cookie2()
 
         # Go to archive and select paper of this date
-        self.wait_shadow("paper-button.showMoreButton").click()
+        button = self.wait_shadow("paper-button.showMoreButton")
+        self.scroll_if_needed(button)
+        button.click()
+
         # make sure right header is not hidden
         header = self.wait_shadow('#rightHeader')
         self.browser.execute_script('arguments[0].removeAttribute("hidden");', header)
@@ -278,6 +285,9 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedupli
             pagenr_int=unit.page,
             date=unit.date
         )
+
+    def execute_script(self, param, element):
+        pass
 
 
 class AlgemeenDagbladScraper(EPagesScraper):
