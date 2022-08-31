@@ -241,17 +241,23 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedupli
                 yield EPagesUnit(url, date, title, page, screenshot, text)
 
     def choose_paper(self, date):
-        pages = self.wait_shadow('div#currentPage')
-        archive_issues = pages.find_elements_by_css_selector("archive-issue")
-        for archive_issue in archive_issues:
-            archive_date = archive_issue.get_attribute("data-date")
-            print(archive_date, "->", archive_date and dutch_strptime(archive_date, "%Y-%m-%d").date())
-            if archive_date and dutch_strptime(archive_date, "%Y-%m-%d").date() == date:
-                archive_issue.click()
-                break
-        else:
-            logging.warning(f"Could not find date {date}")
-            return
+        # Hij opent nu een soort tweede date picker met de kranten van de gekozen week
+        # We zoeken de krant met de goede datum in de archive view
+        archive = self.wait_shadow("#archiveView")
+        archive.find_element_by_xpath(".//div[@data-date='2022-08-31']").click()
+        return
+
+      #  pages = self.wait_shadow_click('div#currentPage')
+       # archive_issues = pages.find_elements_by_css_selector("archive-issue")
+       # for archive_issue in archive_issues:
+        #    archive_date = archive_issue.get_attribute("data-date")
+         #   print(archive_date, "->", archive_date and dutch_strptime(archive_date, "%Y-%m-%d").date())
+          #  if archive_date and dutch_strptime(archive_date, "%Y-%m-%d").date() == date:
+           #     archive_issue.click()
+            #    break
+        #else:
+         #   logging.warning(f"Could not find date {date}")
+
 
     def choose_date(self, date):
         self.wait_shadow('archive-calendar-button').click()

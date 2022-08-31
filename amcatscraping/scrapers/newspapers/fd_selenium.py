@@ -34,6 +34,7 @@ from typing import Tuple
 from selenium.common.exceptions import ElementClickInterceptedException, NoSuchElementException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
+from selenium import webdriver
 
 from amcat.models import Article
 from amcatscraping.scraper import SeleniumLoginMixin, SeleniumMixin, DeduplicatingUnitScraper, DateRangeScraper, \
@@ -76,6 +77,19 @@ class FDScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Deduplicati
     login_error_selector = ".login .modal-content .alert-error"
     allow_missing_login = False
 
+    def get_browser(self):
+        options = webdriver.ChromeOptions()
+        options.add_argument("start-maximized")
+        options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        options.add_experimental_option('useAutomationExtension', False)
+        options.add_argument("--disable-blink-features")
+        options.add_argument("--disable-blink-features=AutomationControlled")
+
+        browser = webdriver.Chrome()
+        browser.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+        FDScraper.BROWSER = browser
+        return browser
+
     def click(self, element):
         try:
             element.click()
@@ -85,9 +99,14 @@ class FDScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Deduplicati
     def login(self, username, password):
         self.browser.get(self.login_url)
         time.sleep(3)
-        iframe = self.wait("#gdpr-consent-notice", timeout=5)
-        self.browser.switch_to.frame(iframe)
-        self.browser.find_element_by_css_selector("button#save").send_keys(Keys.ENTER)
+        self.browser.switch_to.frame(self.shadow.find_element('iframe#sp_message_iframe_675771'))
+        self.wait("button.message-component").click()
+        self.browser.switch_to.default_content()
+        self.browser.switch_to.frame(self.shadow.find_element('iframe#sp_message_iframe_631885'))
+        self.wait("button.message-component").click()
+      #  iframe = self.wait("#gdpr-consent-notice", timeout=5)
+       # self.browser.switch_to.frame(iframe)
+        #self.browser.find_element_by_css_selector("button#save").send_keys(Keys.ENTER)
         self.browser.switch_to.default_content()
         time.sleep(2)
         self.wait("button.profile-button.menu-button").click()
