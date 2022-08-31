@@ -244,7 +244,7 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedupli
         # Hij opent nu een soort tweede date picker met de kranten van de gekozen week
         # We zoeken de krant met de goede datum in de archive view
         archive = self.wait_shadow("#archiveView")
-        archive.find_element_by_xpath(f".//div[@data-date={date}]").click()
+        archive.find_element_by_xpath(f'.//div[@data-date="{date}"]').click()
         return
 
       #  pages = self.wait_shadow_click('div#currentPage')
