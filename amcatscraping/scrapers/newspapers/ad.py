@@ -46,6 +46,9 @@ def dutch_strptime(date, pattern):
     finally:
         locale.setlocale(locale.LC_ALL, loc)
 
+class NoDate(Exception):
+        pass
+
 class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, DeduplicatingUnitScraper):
     """
     Note: This does not work in newer Firefox versions, possibly because of DOM shadow roots.
@@ -178,7 +181,11 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedupli
         self.execute_script('arguments[0].removeAttribute("hidden");', header)
 
         self.choose_date(date)
-        self.choose_paper(date)
+        try:
+            self.choose_paper(date)
+        except (NoSuchElementException, NotVisible):
+            logging.info("No paper due to date, Sunday?")
+            return
 
         # Scrape unit
         self.browser.switch_to.frame(self.shadow.find_element('iframe#issue'))
@@ -240,11 +247,16 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedupli
 
                 yield EPagesUnit(url, date, title, page, screenshot, text)
 
+
+
     def choose_paper(self, date):
         # Hij opent nu een soort tweede date picker met de kranten van de gekozen week
         # We zoeken de krant met de goede datum in de archive view
         archive = self.wait_shadow("#archiveView")
-        archive.find_element_by_xpath(f'.//div[@data-date="{date}"]').click()
+        try:
+            archive.find_element_by_xpath(f'.//div[@data-date="{date}"]').click()
+        except NoDate:
+            pass
         return
 
       #  pages = self.wait_shadow_click('div#currentPage')
