@@ -99,12 +99,16 @@ class FDScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Deduplicati
     def login(self, username, password):
         self.browser.get(self.login_url)
         time.sleep(3)
-        self.browser.switch_to.frame(self.shadow.find_element('iframe#sp_message_iframe_675771'))
+        self.browser.switch_to.frame(self.shadow.find_element('iframe#sp_message_iframe_741852'))
         self.wait("button.message-component").click()
+
         self.browser.switch_to.default_content()
+
         self.browser.switch_to.frame(self.shadow.find_element('iframe#sp_message_iframe_631885'))
         self.wait("button.message-component").click()
-      #  iframe = self.wait("#gdpr-consent-notice", timeout=5)
+#        self.browser.switch_to.frame(self.shadow.find_element('iframe#sp_message_iframe_675771'))
+ #       self.wait("button.message-component").click()
+              #  iframe = self.wait("#gdpr-consent-notice", timeout=5)
        # self.browser.switch_to.frame(iframe)
         #self.browser.find_element_by_css_selector("button#save").send_keys(Keys.ENTER)
         self.browser.switch_to.default_content()
@@ -116,7 +120,6 @@ class FDScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Deduplicati
         self.wait(self.login_password_field).send_keys(password)
         self.wait("button.button").click()
         time.sleep(3)
-
         try:
             error = self.wait(self.login_error_selector, timeout=2)
         except (NoSuchElementException, NotVisible):
