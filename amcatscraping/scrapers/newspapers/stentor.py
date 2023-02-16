@@ -166,7 +166,6 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedupli
 
         # select the right region/edition
         self.browser_get(self.login_url)
-        print(edition)
         if edition is not None:
             regions = self.shadow.find_elements("#regionsContainer > paper-button.regionItem")
             for region in regions:
@@ -262,16 +261,6 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedupli
             pass
         return
 
-      #  pages = self.wait_shadow_click('div#currentPage')
-       # archive_issues = pages.find_elements_by_css_selector("archive-issue")
-       # for archive_issue in archive_issues:
-        #    archive_date = archive_issue.get_attribute("data-date")
-         #   print(archive_date, "->", archive_date and dutch_strptime(archive_date, "%Y-%m-%d").date())
-          #  if archive_date and dutch_strptime(archive_date, "%Y-%m-%d").date() == date:
-           #     archive_issue.click()
-            #    break
-        #else:
-         #   logging.warning(f"Could not find date {date}")
 
 
     def choose_date(self, date):
@@ -279,15 +268,21 @@ class EPagesScraper(SeleniumLoginMixin, SeleniumMixin, DateRangeScraper, Dedupli
         p = self.wait_shadow(".datepicker")
         # find correct year
         while True:
+            print("we zijn in datumprikker")
             picked_year = p.find_element_by_css_selector("date-picker-button").get_attribute("navdate")
+            print(f"picked year is {picked_year}")
             m = re.match(r"\w+ \w+ \d+ (\d{4})", picked_year)
             if not m:
                 raise Exception(f"Could not parse date {picked_year}")
             picked_year = int(m.group(1))
             if picked_year == date.year:
+                print(f"we gaan door {picked_year} is {date.year}")
                 break
+            print("we gaan links klikken")
             p.find_element_by_id("buttonleft").click()
         # find correct month
+        print(f"month{date.month}")
+        time.sleep(2)
         p.find_element_by_id(f"month{date.month}").click()
         day_button = p.find_element_by_id(f"day{date.day}")
         if "disabled" in day_button.get_attribute("class"):
